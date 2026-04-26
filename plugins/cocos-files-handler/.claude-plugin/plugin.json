@@ -1,0 +1,6 @@
+{
+  "name": "cocos-files-handler",
+  "version": "0.1.0",
+  "description": "Read/edit Cocos Creator .scene/.prefab files via safe Node scripts; blocks direct edits.",
+  "author": { "name": "Nikita Shvyryaev", "email": "nikitagsh@gmail.com" }
+}
