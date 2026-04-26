@@ -4,11 +4,9 @@ Personal Claude Code plugins.
 
 ## Install the marketplace
 
-````markdown
 ```
 /plugin marketplace add nshvyryaev/claude-marketplace
 ```
-````
 
 (Replace with the actual GitHub path after pushing.)
 
@@ -21,8 +19,6 @@ Personal Claude Code plugins.
 
 ## Install a plugin
 
-````markdown
 ```
 /plugin install <name>@nshvyryaev-claude-marketplace
 ```
-````
