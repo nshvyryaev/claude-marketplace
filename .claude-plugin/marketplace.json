@@ -1,0 +1,17 @@
+{
+  "name": "nshvyryaev-claude-marketplace",
+  "owner": { "name": "Nikita Shvyryaev", "email": "nikitagsh@gmail.com" },
+  "metadata": { "description": "Personal Claude Code plugins" },
+  "plugins": [
+    {
+      "name": "cocos-files-handler",
+      "source": "./plugins/cocos-files-handler",
+      "description": "Cocos Creator scenes/prefabs editor with guardrail hook"
+    },
+    {
+      "name": "pre-use-allow",
+      "source": "./plugins/pre-use-allow",
+      "description": "PreToolUse Bash auto-approval workflow with observed-history promotion"
+    }
+  ]
+}
