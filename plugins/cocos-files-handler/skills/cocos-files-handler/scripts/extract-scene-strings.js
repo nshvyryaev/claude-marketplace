@@ -144,7 +144,8 @@ for (const f of allFiles) {
     allResults.push(...processFile(f));
 }
 
-// Determine output path — default to tools/patches.json to avoid UTF-16 issues
+// Determine output path. Default writes into the project's .claude/cocos-files-handler/
+// directory (the plugin folder is read-only at runtime when installed via marketplace).
 // with Windows PowerShell shell redirection (> file).
 const outputArgIdx = process.argv.indexOf('--output');
 const useStdout = process.argv.includes('--stdout');
@@ -153,7 +154,9 @@ let outputPath = null;
 if (outputArgIdx >= 0) {
     outputPath = path.resolve(process.argv[outputArgIdx + 1]);
 } else if (!useStdout) {
-    outputPath = path.join(__dirname, 'patches.json');
+    const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    outputPath = path.join(projectRoot, '.claude', 'cocos-files-handler', 'patches.json');
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 }
 
 const json = JSON.stringify(allResults, null, 2);
