@@ -1,6 +1,6 @@
 ---
 name: pre-use-allow
-description: Use when the user asks to allow, permit, or whitelist a specific bash command in the PreToolUse hook approval system.
+description: Use when the user wants to allow, permit, whitelist, auto-approve, or stop being prompted for a specific bash command (or family of bash commands) in the project's PreToolUse hook. Triggers on phrasings like "allow X", "permit X", "whitelist X", "auto-approve X", "don't ask for X anymore", "разреши команду X", "разреши в проекте команды вида X", "добавь X в whitelist / в авто-аппрув / в pre-use-allow", "пусть X не спрашивает разрешение". Edits .claude/hooks/approve-commands-patterns.js + adds a passing test. Skill assumes /pre-use-allow:pre-use-allow-init has been run in the project.
 ---
 
 # pre-use-allow

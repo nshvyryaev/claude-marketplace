@@ -1,6 +1,6 @@
 {
   "name": "pre-use-allow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PreToolUse Bash auto-approval workflow with observed-history promotion",
   "author": { "name": "Nikita Shvyryaev", "email": "nikitagsh@gmail.com" }
 }
