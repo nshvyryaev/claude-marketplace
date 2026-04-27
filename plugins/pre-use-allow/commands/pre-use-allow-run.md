@@ -12,28 +12,13 @@ Promote observed Bash commands into auto-approval patterns.
 
 2. **Deduplicate by `command`.** Count occurrences. Keep the most recently observed `ts` per distinct command (observations are appended in chronological order, so the last seen is the latest).
 
-3. **Filter out already-covered commands.** Run a Node check that imports `<project-root>/.claude/hooks/approve-commands-patterns.js` and tests each command against the patterns. Drop any that already match. Skip malformed JSONL lines instead of crashing.
+3. **Filter out already-covered commands.** Run the helper script shipped with the plugin. It imports the project's `.claude/hooks/approve-commands-patterns.js`, dedupes observations, drops covered ones, and prints one JSON line per uncovered command (`{"command": "...", "count": N}`) sorted by frequency desc. Malformed JSONL lines are skipped silently.
 
    ```bash
-   node -e "
-   const {patterns} = require('./.claude/hooks/approve-commands-patterns.js');
-   const lines = require('fs').readFileSync('./.claude/pre-use-allow/observed.jsonl','utf8').trim().split('\n').filter(Boolean);
-   const seen = new Map();
-   for (const l of lines) {
-     let o;
-     try { o = JSON.parse(l); } catch { continue; }
-     if (typeof o?.command !== 'string') continue;
-     const c = o.command;
-     const cur = seen.get(c) || { ts: o.ts, count: 0 };
-     cur.count++;
-     cur.ts = o.ts;
-     seen.set(c, cur);
-   }
-   const uncov = [...seen.entries()].filter(([c]) => !patterns.some((p) => p.test(c)));
-   uncov.sort((a, b) => b[1].count - a[1].count);
-   for (const [c, {count}] of uncov) console.log(JSON.stringify({c, count}));
-   "
+   node ${CLAUDE_PLUGIN_ROOT}/scripts/filter-observed.js
    ```
+
+   Empty stdout means nothing to promote.
 
 4. **Present the list** to the user as a numbered table sorted by count desc:
 
