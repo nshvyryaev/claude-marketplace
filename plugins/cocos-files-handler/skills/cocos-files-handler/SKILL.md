@@ -1,5 +1,5 @@
 ---
-name: scene-prefab-tools
+name: cocos-files-handler
 description: Working with Cocos Creator scenes and prefabs via Node.js scripts. Use when you need to inspect or modify prefab or scene.
 ---
 
@@ -7,43 +7,43 @@ description: Working with Cocos Creator scenes and prefabs via Node.js scripts. 
 
 | Скрипт | Назначение |
 |--------|-----------|
-| `node .claude/skills/scene-prefab-tools/scripts/extract-scene-strings.js` | Ищет Label с кириллицей в .scene/.prefab, пишет в `.claude/skills/scene-prefab-tools/scripts/patches.json` |
-| `node .claude/skills/scene-prefab-tools/scripts/add-locale-keys.js` | Добавляет недостающие ключи в `ru.json` и `en.json` (идемпотентен) |
-| `node .claude/skills/scene-prefab-tools/scripts/add-localized-text.js --meta <meta> --patches .claude/skills/scene-prefab-tools/scripts/patches.json` | Вставляет LocalizedText компоненты в сцены/префабы по patches.json |
-| `node .claude/skills/scene-prefab-tools/scripts/add-manager-to-scene.js --scene <scene> --meta <meta> --name <Name> --position first` | Добавляет менеджер-ноду в Start-сцену |
-| `node .claude/skills/scene-prefab-tools/scripts/fix-uuid-compact.js` | Заменяет полные UUID (36 символов) на компактные (23 символа) во всех сценах/префабах |
-| `node .claude/skills/scene-prefab-tools/scripts/prefab-inspector.js --file <prefab>` | Выводит читаемое дерево нод .prefab/.scene файла |
-| `node .claude/skills/scene-prefab-tools/scripts/find-sprite-frame.js --file <scene/prefab> [--node <Name>] [--index <n>]` | Извлекает UUID ассета SpriteFrame у существующего cc.Sprite — для повторного использования того же фона в новых нодах |
-| `node .claude/skills/scene-prefab-tools/scripts/add-prefab-nodes.js --file <prefab> --spec <spec.json> [--dry-run]` | Вставляет поддерево нод в префаб по spec JSON |
-| `node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js --file <scene> --node <NodeName> (--meta <meta> \| --type <cc.Type>) --property <prop> --value <val> [--dry-run]` | Устанавливает свойство на существующем компоненте в сцене/префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button и т.п.) |
-| `node .claude/skills/scene-prefab-tools/scripts/add-component.js --file <scene/prefab> --node <NodeName> (--meta <meta> \| --type <cc.Type>) [--properties <json>] [--force] [--dry-run]` | Добавляет компонент к существующей ноде в сцене или префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button, cc.Layout и т.п.) |
-| `node .claude/skills/scene-prefab-tools/scripts/edit-prefab.js --file <scene/prefab> --ops <ops.json> [--dry-run]` | Применяет набор структурных операций (resize-uitransform, **set-position**, create-node, move-component, reparent) по JSON-файлу |
-| `node .claude/skills/scene-prefab-tools/scripts/create-prefab.js --file <prefab> --name <RootName> [--width w] [--height h] [--anchor-x ax] [--anchor-y ay] [--active true\|false] [--sprite-frame uuid@sub] [--sprite-color r,g,b,a] [--dry-run]` | Создаёт новый пустой .prefab файл с корневой нодой и UITransform (опционально — Sprite). |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js` | Ищет Label с кириллицей в .scene/.prefab, пишет в `.claude/cocos-files-handler/patches.json` |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-locale-keys.js` | Добавляет недостающие ключи в `ru.json` и `en.json` (идемпотентен) |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-localized-text.js --meta <meta> --patches .claude/cocos-files-handler/patches.json` | Вставляет LocalizedText компоненты в сцены/префабы по patches.json |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-manager-to-scene.js --scene <scene> --meta <meta> --name <Name> --position first` | Добавляет менеджер-ноду в Start-сцену |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/fix-uuid-compact.js` | Заменяет полные UUID (36 символов) на компактные (23 символа) во всех сценах/префабах |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file <prefab>` | Выводит читаемое дерево нод .prefab/.scene файла |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/find-sprite-frame.js --file <scene/prefab> [--node <Name>] [--index <n>]` | Извлекает UUID ассета SpriteFrame у существующего cc.Sprite — для повторного использования того же фона в новых нодах |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file <prefab> --spec <spec.json> [--dry-run]` | Вставляет поддерево нод в префаб по spec JSON |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/patch-component-property.js --file <scene> --node <NodeName> (--meta <meta> \| --type <cc.Type>) --property <prop> --value <val> [--dry-run]` | Устанавливает свойство на существующем компоненте в сцене/префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button и т.п.) |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js --file <scene/prefab> --node <NodeName> (--meta <meta> \| --type <cc.Type>) [--properties <json>] [--force] [--dry-run]` | Добавляет компонент к существующей ноде в сцене или префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button, cc.Layout и т.п.) |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js --file <scene/prefab> --ops <ops.json> [--dry-run]` | Применяет набор структурных операций (resize-uitransform, **set-position**, create-node, move-component, reparent) по JSON-файлу |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/create-prefab.js --file <prefab> --name <RootName> [--width w] [--height h] [--anchor-x ax] [--anchor-y ay] [--active true\|false] [--sprite-frame uuid@sub] [--sprite-color r,g,b,a] [--dry-run]` | Создаёт новый пустой .prefab файл с корневой нодой и UITransform (опционально — Sprite). |
 
 ## Полный рабочий цикл перевода новых строк
 
 ```bash
 # 1. Найти все кириллические строки в сценах и префабах
-node .claude/skills/scene-prefab-tools/scripts/extract-scene-strings.js
-# → пишет .claude/skills/scene-prefab-tools/scripts/patches.json
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js
+# → пишет .claude/cocos-files-handler/patches.json
 
 # 2. Заполнить translationKey для каждой записи в patches.json
 # Пустые ключи пропускаются, оставить пустыми можно для динамического контента.
 
 # 3. Обновить add-locale-keys.js: добавить новые ключи в TRANSLATIONS,
 #    затем запустить — безопасно добавит только недостающие ключи
-node .claude/skills/scene-prefab-tools/scripts/add-locale-keys.js
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-locale-keys.js
 
 # 4. Дождаться, чтобы Cocos Creator создал .meta для LocalizedText.ts
 # (файл создаётся автоматически при обнаружении нового .ts файла)
 
 # 5. Вставить LocalizedText компоненты в сцены/префабы
-node .claude/skills/scene-prefab-tools/scripts/add-localized-text.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-localized-text.js \
   --meta assets/scripts/Components/LocalizedText.ts.meta \
-  --patches .claude/skills/scene-prefab-tools/scripts/patches.json
+  --patches .claude/cocos-files-handler/patches.json
 
 # 6. Проверить что кириллица не осталась
-node .claude/skills/scene-prefab-tools/scripts/extract-scene-strings.js
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js
 # → повторно вывести patches.json, всё с translationKey должно исчезнуть
 ```
 
@@ -58,8 +58,8 @@ node .claude/skills/scene-prefab-tools/scripts/extract-scene-strings.js
 ### prefab-inspector.js — просмотр структуры
 
 ```bash
-node .claude/skills/scene-prefab-tools/scripts/prefab-inspector.js --file assets/prefabs/Settings.prefab
-node .claude/skills/scene-prefab-tools/scripts/prefab-inspector.js --file assets/scenes/Settings.scene
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file assets/prefabs/Settings.prefab
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file assets/scenes/Settings.scene
 ```
 
 Выводит читаемое дерево: имя ноды, индекс, active/inactive, размер UITransform, якорь, позицию, компоненты (тип, текст, цвет спрайта, uuid фрейма, layout-тип и т.д.). Используй перед редактированием, чтобы понять текущую структуру.
@@ -68,10 +68,10 @@ node .claude/skills/scene-prefab-tools/scripts/prefab-inspector.js --file assets
 
 ```bash
 # Тестовый прогон (не пишет файл)
-node .claude/skills/scene-prefab-tools/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec .claude/skills/scene-prefab-tools/scripts/my-spec.json --dry-run
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec .claude/cocos-files-handler/my-spec.json --dry-run
 
 # Реальное выполнение
-node .claude/skills/scene-prefab-tools/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec .claude/skills/scene-prefab-tools/scripts/my-spec.json
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec .claude/cocos-files-handler/my-spec.json
 ```
 
 Скрипт **идемпотентен**: если нод с `idempotencyName` уже есть в родителе — пропускает.
@@ -120,18 +120,18 @@ node .claude/skills/scene-prefab-tools/scripts/add-prefab-nodes.js --file assets
 Если `.meta` файл не найден (Cocos ещё не создал) — компонент пропускается с предупреждением, индекс не расходуется.
 
 **Workflow: добавить новый блок нод в префаб**
-1. `node .claude/skills/scene-prefab-tools/scripts/prefab-inspector.js --file ...` — понять текущую структуру и координаты
-2. Создать `.claude/skills/scene-prefab-tools/scripts/my-spec.json` с нужными нодами
+1. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file ...` — понять текущую структуру и координаты
+2. Создать `.claude/cocos-files-handler/my-spec.json` с нужными нодами
 3. Убедиться что Cocos Creator создал `.meta` для всех пользовательских скриптов
-4. `node .claude/skills/scene-prefab-tools/scripts/add-prefab-nodes.js --file ... --spec ... --dry-run` — проверить
-5. `node .claude/skills/scene-prefab-tools/scripts/add-prefab-nodes.js --file ... --spec ...` — применить
-6. `node .claude/skills/scene-prefab-tools/scripts/prefab-inspector.js --file ...` — верифицировать результат
+4. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file ... --spec ... --dry-run` — проверить
+5. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file ... --spec ...` — применить
+6. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file ...` — верифицировать результат
 
 ## Изменение свойства существующего компонента
 
 ```bash
 # Dry-run — посмотреть что изменится
-node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/patch-component-property.js \
   --file assets/scenes/StartItch.scene \
   --node LocalizationManager \
   --meta assets/scripts/Managers/Global/LocalizationManager.ts.meta \
@@ -140,7 +140,7 @@ node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js \
   --dry-run
 
 # Применить
-node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/patch-component-property.js \
   --file assets/scenes/StartItch.scene \
   --node LocalizationManager \
   --meta assets/scripts/Managers/Global/LocalizationManager.ts.meta \
@@ -155,7 +155,7 @@ node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js \
 
 ```bash
 # Поменять alignMode у cc.Widget
-node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/patch-component-property.js \
   --file assets/prefabs/MobileControls.prefab --node BonusButton \
   --type cc.Widget --property alignMode --value 1
 ```
@@ -170,34 +170,34 @@ node .claude/skills/scene-prefab-tools/scripts/patch-component-property.js \
 
 ```bash
 # Скрипт-компонент: пустой
-node .claude/skills/scene-prefab-tools/scripts/add-component.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
   --file assets/prefabs/Player.prefab \
   --node Player \
   --meta assets/scripts/components/SpawnPoint.ts.meta
 
 # Скрипт-компонент: с простыми свойствами
-node .claude/skills/scene-prefab-tools/scripts/add-component.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
   --file assets/prefabs/Enemy.prefab \
   --node Enemy \
   --meta assets/scripts/components/MoveSpeed.ts.meta \
   --properties '{"value": 600}'
 
 # Скрипт-компонент: ссылки на ноды и ассеты
-node .claude/skills/scene-prefab-tools/scripts/add-component.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
   --file assets/scenes/Main.scene \
   --node GameWorld \
   --meta assets/scripts/prefabs/EnemySpawner.ts.meta \
   --properties '{"enemyPrefab":"@asset:assets/prefabs/Enemy.prefab.meta","playArea":"@node:PlayScreenBG","count":2,"speed":600}'
 
 # Встроенный тип: cc.Widget, растянутый на весь viewport
-node .claude/skills/scene-prefab-tools/scripts/add-component.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
   --file assets/prefabs/MobileControls.prefab \
   --node MobileControls \
   --type cc.Widget \
   --properties '{"isAlignTop":true,"isAlignBottom":true,"isAlignLeft":true,"isAlignRight":true,"top":0,"bottom":0,"left":0,"right":0,"alignMode":2}'
 
 # Встроенный тип: cc.Button
-node .claude/skills/scene-prefab-tools/scripts/add-component.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
   --file assets/scenes/Start.scene \
   --node PlayButton \
   --type cc.Button \
@@ -227,7 +227,7 @@ node .claude/skills/scene-prefab-tools/scripts/add-component.js \
 **Временные ops-файлы пиши в `tmp/` в корне проекта, а не в папку скилла** (после применения — удаляй).
 
 ```bash
-node .claude/skills/scene-prefab-tools/scripts/edit-prefab.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js \
   --file assets/prefabs/Player.prefab \
   --ops tmp/my-edit.json \
   [--dry-run]
@@ -288,7 +288,7 @@ node .claude/skills/scene-prefab-tools/scripts/edit-prefab.js \
 ```
 
 ```bash
-node .claude/skills/scene-prefab-tools/scripts/edit-prefab.js \
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js \
   --file assets/prefabs/Player.prefab --ops tmp/shrink-player.json --dry-run
 # → проверить вывод, затем запустить без --dry-run
 rm tmp/shrink-player.json
@@ -298,7 +298,7 @@ rm tmp/shrink-player.json
 
 Cocos Creator хранит ссылки на скрипты в сценах в **компактном 23-символьном формате**, НЕ в полном UUID из .meta файла.
 
-**Алгоритм конвертации** (реализован во всех .claude/skills/scene-prefab-tools/scripts/*.js скриптах):
+**Алгоритм конвертации** (реализован во всех ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/*.js скриптах):
 ```javascript
 function compressUuid(uuid) {
     const hex = uuid.replace(/-/g, '');                           // 32 hex символа
@@ -310,7 +310,7 @@ function compressUuid(uuid) {
 ```
 
 Если скрипты вставили компоненты с **полным UUID** (36 символов с дефисами) — Cocos показывает
-`Script "..." is missing or invalid`. Исправление: запустить `node .claude/skills/scene-prefab-tools/scripts/fix-uuid-compact.js`.
+`Script "..." is missing or invalid`. Исправление: запустить `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/fix-uuid-compact.js`.
 
 ## Формат Cocos Creator 3.x сцены (JSON-массив)
 
@@ -342,7 +342,7 @@ function compressUuid(uuid) {
 ```bash
 # Дождаться создания .meta файла Cocos Creator, затем:
 for scene in StartDefault StartVK StartYandex StartTest; do
-  node .claude/skills/scene-prefab-tools/scripts/add-manager-to-scene.js \
+  node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-manager-to-scene.js \
     --scene "assets/scenes/${scene}.scene" \
     --meta "assets/scripts/Managers/Global/MyManager.ts.meta" \
     --name MyManager --position first
