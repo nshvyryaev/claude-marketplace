@@ -20,7 +20,10 @@ Initialize the current project's `CLAUDE.md` with cocos-files-handler usage rule
 
 4. **Write or update the cocos-files-handler block.**
    - Search for the markers `<!-- cocos-files-handler:begin -->` and `<!-- cocos-files-handler:end -->`.
-   - If both present: replace everything between them (inclusive) with the template content.
+   - If both present:
+     - Before replacing, extract any nested `<!-- cocos-files-handler:contribute:begin -->` ... `<!-- cocos-files-handler:contribute:end -->` sub-block from the existing content.
+     - Replace everything between the outer markers (inclusive) with the template content.
+     - If a contributor sub-block was extracted, re-insert it just before the closing `<!-- cocos-files-handler:end -->` marker. (This preserves contributor mode across consumer-mode reruns — see Notes.)
    - Otherwise: append a blank line + the template content to the end of CLAUDE.md.
 
 5. **If `MODE=contribute`:** append a contributor sub-block immediately *before* the closing `<!-- cocos-files-handler:end -->` marker (so it stays inside the main block, idempotently replaceable).

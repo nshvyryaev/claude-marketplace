@@ -23,6 +23,12 @@ function readLog(projectDir) {
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pua-'));
+const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'pua-cwd-'));
+process.on('exit', () => {
+  for (const d of [tmp, tmp2]) {
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+  }
+});
 let passed = 0;
 
 // Case 1: Bash command with successful response is appended.
@@ -50,7 +56,6 @@ console.log('  ok  ignores non-Bash tool');
 passed++;
 
 // Case 4: Missing CLAUDE_PROJECT_DIR falls back to cwd().
-const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'pua-cwd-'));
 const r2 = spawnSync('node', [HOOK], {
   input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'pwd' }, tool_response: {} }),
   encoding: 'utf8',

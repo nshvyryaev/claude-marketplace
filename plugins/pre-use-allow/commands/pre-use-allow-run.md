@@ -10,16 +10,25 @@ Promote observed Bash commands into auto-approval patterns.
 
 1. **Read the observed log** at `<project-root>/.claude/pre-use-allow/observed.jsonl`. Each line is `{"ts": "...", "command": "..."}`. If the file is missing or empty, report "No observations yet — keep working and try again later." and stop.
 
-2. **Deduplicate by `command`.** Keep the latest `ts` per distinct command. Count occurrences.
+2. **Deduplicate by `command`.** Count occurrences. Keep the most recently observed `ts` per distinct command (observations are appended in chronological order, so the last seen is the latest).
 
-3. **Filter out already-covered commands.** Run a one-liner Node check that imports `<project-root>/.claude/hooks/approve-commands-patterns.js` and tests each command against the patterns. Drop any that already match.
+3. **Filter out already-covered commands.** Run a Node check that imports `<project-root>/.claude/hooks/approve-commands-patterns.js` and tests each command against the patterns. Drop any that already match. Skip malformed JSONL lines instead of crashing.
 
    ```bash
    node -e "
    const {patterns} = require('./.claude/hooks/approve-commands-patterns.js');
    const lines = require('fs').readFileSync('./.claude/pre-use-allow/observed.jsonl','utf8').trim().split('\n').filter(Boolean);
    const seen = new Map();
-   for (const l of lines) { const o = JSON.parse(l); const c = o.command; const cur = seen.get(c) || {ts: o.ts, count: 0}; cur.count++; cur.ts = o.ts; seen.set(c, cur); }
+   for (const l of lines) {
+     let o;
+     try { o = JSON.parse(l); } catch { continue; }
+     if (typeof o?.command !== 'string') continue;
+     const c = o.command;
+     const cur = seen.get(c) || { ts: o.ts, count: 0 };
+     cur.count++;
+     cur.ts = o.ts;
+     seen.set(c, cur);
+   }
    const uncov = [...seen.entries()].filter(([c]) => !patterns.some((p) => p.test(c)));
    uncov.sort((a, b) => b[1].count - a[1].count);
    for (const [c, {count}] of uncov) console.log(JSON.stringify({c, count}));

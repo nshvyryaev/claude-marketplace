@@ -6,7 +6,6 @@
 // (single source of truth, also imported by approve-commands.test.js).
 
 const path = require('path');
-const { patterns } = require(path.join(__dirname, 'approve-commands-patterns.js'));
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -18,6 +17,13 @@ process.stdin.on('end', () => {
   if (input?.tool_name !== 'Bash') { process.stdout.write('{}'); return; }
   const cmd = input?.tool_input?.command;
   if (typeof cmd !== 'string') { process.stdout.write('{}'); return; }
+
+  // Load patterns lazily so a missing/broken patterns module degrades to neutral
+  // instead of crashing every Bash invocation.
+  let patterns;
+  try { ({ patterns } = require(path.join(__dirname, 'approve-commands-patterns.js'))); }
+  catch { process.stdout.write('{}'); return; }
+  if (!Array.isArray(patterns)) { process.stdout.write('{}'); return; }
 
   if (patterns.some((p) => p.test(cmd))) {
     process.stdout.write(JSON.stringify({
