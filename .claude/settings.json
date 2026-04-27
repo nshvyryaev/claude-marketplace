@@ -12,7 +12,8 @@
       "Bash(node plugins/pre-use-allow/templates/approve-commands.test.js)",
       "Bash(node plugins/pre-use-allow/tests/observe-commands.test.js)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('plugins/pre-use-allow/.claude-plugin/plugin.json'\\)\\)\")"
     ]
   }
 }
