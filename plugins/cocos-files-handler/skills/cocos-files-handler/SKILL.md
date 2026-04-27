@@ -3,13 +3,22 @@ name: cocos-files-handler
 description: Working with Cocos Creator scenes and prefabs via Node.js scripts. Use when you need to inspect or modify prefab or scene.
 ---
 
+## Куда писать временные JSON
+
+Все промежуточные JSON-файлы (patches.json, my-spec.json, ops-файлы для `edit-prefab.js`) — кладутся в `tmp/` в корне проекта. Эта папка должна быть в `.gitignore`. Перед первым запуском любого из скриптов убедись:
+
+1. Что `tmp/` существует — `mkdir -p tmp` (скрипты с дефолтным выводом создают её сами, но для явных `--patches`/`--spec`/`--ops` путей лучше создать заранее).
+2. Что `tmp/` в `.gitignore` — если в файле проекта `.gitignore` нет строки `tmp/`, добавь её. Если `.gitignore` отсутствует — создай и положи туда `tmp/`.
+
+Не пиши в `.claude/` — операции там запрашивают разрешение, и это лишний шум.
+
 ## Инструменты
 
 | Скрипт | Назначение |
 |--------|-----------|
-| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js` | Ищет Label с кириллицей в .scene/.prefab, пишет в `.claude/cocos-files-handler/patches.json` |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js` | Ищет Label с кириллицей в .scene/.prefab, пишет в `tmp/patches.json` |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-locale-keys.js` | Добавляет недостающие ключи в `ru.json` и `en.json` (идемпотентен) |
-| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-localized-text.js --meta <meta> --patches .claude/cocos-files-handler/patches.json` | Вставляет LocalizedText компоненты в сцены/префабы по patches.json |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-localized-text.js --meta <meta> --patches tmp/patches.json` | Вставляет LocalizedText компоненты в сцены/префабы по patches.json |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-manager-to-scene.js --scene <scene> --meta <meta> --name <Name> --position first` | Добавляет менеджер-ноду в Start-сцену |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/fix-uuid-compact.js` | Заменяет полные UUID (36 символов) на компактные (23 символа) во всех сценах/префабах |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file <prefab>` | Выводит читаемое дерево нод .prefab/.scene файла |
@@ -25,7 +34,7 @@ description: Working with Cocos Creator scenes and prefabs via Node.js scripts. 
 ```bash
 # 1. Найти все кириллические строки в сценах и префабах
 node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js
-# → пишет .claude/cocos-files-handler/patches.json
+# → пишет tmp/patches.json
 
 # 2. Заполнить translationKey для каждой записи в patches.json
 # Пустые ключи пропускаются, оставить пустыми можно для динамического контента.
@@ -40,7 +49,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-locale-keys.js
 # 5. Вставить LocalizedText компоненты в сцены/префабы
 node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-localized-text.js \
   --meta assets/scripts/Components/LocalizedText.ts.meta \
-  --patches .claude/cocos-files-handler/patches.json
+  --patches tmp/patches.json
 
 # 6. Проверить что кириллица не осталась
 node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/extract-scene-strings.js
@@ -68,10 +77,10 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.j
 
 ```bash
 # Тестовый прогон (не пишет файл)
-node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec .claude/cocos-files-handler/my-spec.json --dry-run
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec tmp/my-spec.json --dry-run
 
 # Реальное выполнение
-node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec .claude/cocos-files-handler/my-spec.json
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec tmp/my-spec.json
 ```
 
 Скрипт **идемпотентен**: если нод с `idempotencyName` уже есть в родителе — пропускает.
@@ -121,7 +130,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.j
 
 **Workflow: добавить новый блок нод в префаб**
 1. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/prefab-inspector.js --file ...` — понять текущую структуру и координаты
-2. Создать `.claude/cocos-files-handler/my-spec.json` с нужными нодами
+2. Создать `tmp/my-spec.json` с нужными нодами
 3. Убедиться что Cocos Creator создал `.meta` для всех пользовательских скриптов
 4. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file ... --spec ... --dry-run` — проверить
 5. `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file ... --spec ...` — применить

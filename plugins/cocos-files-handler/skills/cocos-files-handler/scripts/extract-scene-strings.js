@@ -144,9 +144,10 @@ for (const f of allFiles) {
     allResults.push(...processFile(f));
 }
 
-// Determine output path. Default writes into the project's .claude/cocos-files-handler/
-// directory (the plugin folder is read-only at runtime when installed via marketplace).
-// with Windows PowerShell shell redirection (> file).
+// Determine output path. Default writes into the project's tmp/ directory
+// (avoids writes under .claude/, which Claude Code prompts on, and is easy to gitignore).
+// The plugin folder is read-only at runtime when installed via marketplace, so we never
+// write there. --stdout supports Windows PowerShell shell redirection (> file).
 const outputArgIdx = process.argv.indexOf('--output');
 const useStdout = process.argv.includes('--stdout');
 
@@ -155,7 +156,7 @@ if (outputArgIdx >= 0) {
     outputPath = path.resolve(process.argv[outputArgIdx + 1]);
 } else if (!useStdout) {
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-    outputPath = path.join(projectRoot, '.claude', 'cocos-files-handler', 'patches.json');
+    outputPath = path.join(projectRoot, 'tmp', 'patches.json');
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 }
 
