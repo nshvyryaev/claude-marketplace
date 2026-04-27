@@ -18,7 +18,7 @@ process.stdin.on('end', () => {
         permissionDecisionReason:
           'Use cocos-files-handler scripts (edit-prefab.js, add-component.js, ' +
           'patch-component-property.js, etc.) instead of editing .scene/.prefab files directly. ' +
-          'See ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/SKILL.md.',
+          'See the cocos-files-handler skill (SKILL.md) for the full toolkit.',
       },
     }));
     return;
