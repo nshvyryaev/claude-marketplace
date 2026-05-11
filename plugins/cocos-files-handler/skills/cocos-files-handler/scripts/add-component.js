@@ -52,7 +52,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const ROOT_DIR = path.resolve(__dirname, '..', '..', '..', '..');
+const ROOT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
 // ── Arg parsing ───────────────────────────────────────────────────────────────
 
@@ -169,6 +169,7 @@ function inferExpectedType(metaRelPath) {
         case '.ogg':
         case '.wav':    return 'cc.AudioClip';
         case '.json':   return 'cc.JsonAsset';
+        case '.anim':   return 'cc.AnimationClip';
         default:        return 'cc.Asset';
     }
 }

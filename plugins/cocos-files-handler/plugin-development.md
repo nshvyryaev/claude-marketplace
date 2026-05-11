@@ -30,11 +30,11 @@ The hook deliberately produces no stderr/log output. Claude Code surfaces `permi
 
 ## Known caveat: `__dirname`-derived paths in vendored scripts
 
-Several scripts (`add-component.js`, `add-locale-keys.js`, `add-localized-text.js`, `add-manager-to-scene.js`, `extract-scene-strings.js`, `fix-uuid-compact.js`, `patch-component-property.js`) compute a `ROOT`/`ROOT_DIR`/`ASSETS_DIR` from `__dirname`. These were correct in the original deployment under `<project>/.claude/skills/scene-prefab-tools/scripts/`, but **do not resolve correctly when the plugin is installed via marketplace** (the plugin folder is far from the user's Cocos project root).
+Several scripts compute a `ROOT`/`ROOT_DIR`/`ASSETS_DIR` from `__dirname`. These were correct in the original deployment under `<project>/.claude/skills/scene-prefab-tools/scripts/`, but **do not resolve correctly when the plugin is installed via marketplace** (the plugin folder is far from the user's Cocos project root).
 
-For v0.1.0 these scripts work in `--contribute` mode only when the marketplace repo and the Cocos project happen to share the right relative layout. Marketplace-installed users should pass an explicit `--file` (and similar) flag for every script — most scripts already accept these.
+**Status (v0.2.0):** `add-component.js`, `patch-component-property.js`, and the new `create-anim-clip.js` use `process.env.CLAUDE_PROJECT_DIR || process.cwd()` — they work from any cwd / installation layout.
 
-To fix properly, replace each `__dirname`-derived root with `process.env.CLAUDE_PROJECT_DIR || process.cwd()`. Bump the minor version when this lands.
+**Still pending:** `add-locale-keys.js`, `add-localized-text.js`, `add-manager-to-scene.js`, `extract-scene-strings.js`, `fix-uuid-compact.js` still derive their root from `__dirname`. Marketplace-installed users should pass explicit `--file` / `--meta` / etc. flags for those, or run `process.env.CLAUDE_PROJECT_DIR` matches the actual Cocos project root. Switch each one to the env-var pattern and bump the minor version when migrating.
 
 ## Running tests
 

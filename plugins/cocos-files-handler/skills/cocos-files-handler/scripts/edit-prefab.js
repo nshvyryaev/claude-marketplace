@@ -42,6 +42,11 @@
  *                                 // rewrites all __id__ references in the file.
  *   }
  *
+ *   { "op": "set-node-active",
+ *     "node": "EvolutionCutscene",
+ *     "active": true               // sets node._active (the serialized active flag)
+ *   }
+ *
  *   { "op": "move-component",
  *     "from": "Player",
  *     "to":   "PlayerBackground",
@@ -122,14 +127,43 @@ function randomFileId() {
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '').slice(0, 22);
 }
 
-function findNodeIndex(arr, name) {
+function findNodeIndex(arr, nameOrPath) {
+    // Path form "Parent/Child/Grandchild" — resolves segment-by-segment, requires
+    // each step to be unique among children of the previous node. Useful when
+    // a leaf name (e.g. "Label", "Frame") is ambiguous globally.
+    if (nameOrPath.includes('/')) {
+        const segments = nameOrPath.split('/').filter((s) => s.length > 0);
+        if (segments.length === 0) throw new Error(`Node "${nameOrPath}" — empty path`);
+        let currentId = findNodeIndex(arr, segments[0]); // recurse for first segment (still requires uniqueness)
+        for (let s = 1; s < segments.length; s++) {
+            const segName = segments[s];
+            const node = arr[currentId];
+            const childMatches = [];
+            for (const ref of node._children || []) {
+                if (!ref || ref.__id__ == null) continue;
+                const child = arr[ref.__id__];
+                if (child && child.__type__ === 'cc.Node' && child._name === segName) {
+                    childMatches.push(ref.__id__);
+                }
+            }
+            if (childMatches.length === 0) {
+                throw new Error(`Node "${nameOrPath}" — segment "${segName}" not found under "${segments[s - 1]}"`);
+            }
+            if (childMatches.length > 1) {
+                throw new Error(`Node "${nameOrPath}" — segment "${segName}" is ambiguous (${childMatches.length} matches under "${segments[s - 1]}")`);
+            }
+            currentId = childMatches[0];
+        }
+        return currentId;
+    }
+
     const matches = [];
     for (let i = 0; i < arr.length; i++) {
         const o = arr[i];
-        if (o && o.__type__ === 'cc.Node' && o._name === name) matches.push(i);
+        if (o && o.__type__ === 'cc.Node' && o._name === nameOrPath) matches.push(i);
     }
-    if (matches.length === 0) throw new Error(`Node "${name}" not found`);
-    if (matches.length > 1) throw new Error(`Node "${name}" is ambiguous (${matches.length} matches)`);
+    if (matches.length === 0) throw new Error(`Node "${nameOrPath}" not found`);
+    if (matches.length > 1) throw new Error(`Node "${nameOrPath}" is ambiguous (${matches.length} matches) — use a path "Parent/Child" to disambiguate`);
     return matches[0];
 }
 
@@ -531,6 +565,18 @@ function opSetPosition(arr, op) {
     console.log(`  set-position "${op.node}": (${old.x ?? 0},${old.y ?? 0},${old.z ?? 0}) → (${x},${y},${z})`);
 }
 
+function opSetNodeActive(arr, op) {
+    if (!op.node) throw new Error(`set-node-active: "node" is required`);
+    if (typeof op.active !== 'boolean') {
+        throw new Error(`set-node-active: "active" must be a boolean`);
+    }
+    const nodeId = findNodeIndex(arr, op.node);
+    const node = arr[nodeId];
+    const old = node._active;
+    node._active = op.active;
+    console.log(`  set-node-active "${op.node}": ${old} → ${op.active}`);
+}
+
 const OPS = {
     'resize-uitransform': opResizeUITransform,
     'create-node':        opCreateNode,
@@ -538,6 +584,7 @@ const OPS = {
     'move-component':     opMoveComponent,
     'reparent':           opReparent,
     'set-position':       opSetPosition,
+    'set-node-active':    opSetNodeActive,
 };
 
 // ── Main ──────────────────────────────────────────────────────────────────────

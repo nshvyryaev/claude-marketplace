@@ -7,11 +7,22 @@ description: Use when the user wants to allow, permit, whitelist, auto-approve, 
 
 Adds a new command pattern to the bash auto-approval hook, with a safety check and a passing test.
 
+## How the hook decides (read this first)
+
+The hook does NOT match the full command string with a single regex. Instead:
+
+1. The parser in `approve-commands-core.js` splits the bash command into **segments** (separated by `&&`, `||`, `;`) and each segment into **pipe components** (separated by `|`). It respects quotes and escapes.
+2. The parser **rejects up front** unsafe shell constructs anywhere outside quotes: `$(...)`, backticks, `<<` heredocs, `>` / `<` redirects, single `&` background, `()` subshells, `{}` groups, control flow, and unterminated quotes.
+3. Each pipe component is then matched against the **per-segment patterns** in `approve-commands-patterns.js`. The full command is approved only if **every** pipe component of **every** sequence segment matches at least one pattern.
+
+This means your patterns only describe a single bare command. The parser handles all the shell structure. You can no longer accidentally widen a pattern to swallow `&&` or `;` injections — they are split out and each part is checked independently.
+
 ## Files
 
-- `.claude/hooks/approve-commands-patterns.js` — all patterns (single source of truth)
-- `.claude/hooks/approve-commands.js` — hook entry point (imports patterns, do not edit patterns here)
-- `.claude/hooks/approve-commands.test.js` — test suite (imports same patterns)
+- `.claude/hooks/approve-commands-core.js` — parser + decision logic. **Do not edit** in user projects unless you are also updating the plugin.
+- `.claude/hooks/approve-commands-patterns.js` — `segmentPatterns: RegExp[]` (single source of truth for what is allowed).
+- `.claude/hooks/approve-commands.js` — PreToolUse entry point that wires stdin → core → stdout.
+- `.claude/hooks/approve-commands.test.js` — test suite (imports same core + patterns).
 
 ## Workflow
 
@@ -20,10 +31,10 @@ digraph flow {
   "Receive command to allow" -> "Safety check";
   "Safety check" [shape=diamond];
   "Safety check" -> "Warn user + ask confirmation" [label="unsafe"];
-  "Safety check" -> "Add/extend pattern" [label="safe"];
-  "Warn user + ask confirmation" -> "Add/extend pattern" [label="confirmed"];
+  "Safety check" -> "Add/extend per-segment pattern" [label="safe"];
+  "Warn user + ask confirmation" -> "Add/extend per-segment pattern" [label="confirmed"];
   "Warn user + ask confirmation" -> "Stop" [label="declined"];
-  "Add/extend pattern" -> "Add SHOULD_APPROVE test case";
+  "Add/extend per-segment pattern" -> "Add SHOULD_APPROVE test case";
   "Add SHOULD_APPROVE test case" -> "Run test";
   "Run test" [shape=diamond];
   "Run test" -> "Done" [label="all pass"];
@@ -32,53 +43,71 @@ digraph flow {
 }
 ```
 
-## Step 1 — Safety Check
+## Step 1 — Safety check
 
-Before touching any file, assess whether the command is safe to auto-approve.
+Before touching any file, assess whether the command is safe to auto-approve. Note: the parser already blocks `$(...)`, backticks, redirects, heredocs, background, subshells, and operator-injected chains. Your job is to assess the *verb itself*.
 
 **Unsafe if any of these apply:**
-- Destructive filesystem ops: `rm`, `mv`, `cp` with broad globs, `rmdir`
-- Overwrites outside `/tmp` without project-path guard
-- `git push --force`, `git reset --hard`, `git clean`
-- Network calls that exfiltrate data: `curl … | bash`, `wget`
-- `eval`, `exec`, backtick execution
-- `;` chains where the second command is unsafe
+- Destructive filesystem ops: `rm`, `rmdir`, broad-glob `mv` / `cp`
+- Anything that writes outside `/tmp` without a project-path guard
+- `git push --force`, `git reset --hard`, `git clean -fd`
+- Network calls that can exfiltrate data: `curl`, `wget` to arbitrary URLs
+- `npm publish`, `npm uninstall`, `npm install` of arbitrary remote packages
 - `sudo`, privilege escalation
+- `eval`, `node -e "..."` with arbitrary code
 
 If unsafe: **tell the user exactly what the risk is** (which part is dangerous and why), then ask for explicit confirmation before proceeding. Do not add the pattern if the user declines.
 
-## Step 2 — Add or Extend Pattern in `approve-commands-patterns.js`
+## Step 2 — Split the request into per-segment patterns
 
-Open the file and decide:
+A request like `разреши cd "E:\proj" && git status && git diff` is **three** segments. You add a pattern per distinct bare command:
 
-- **New command family** → add a new `new RegExp(...)` entry with a comment
-- **Variant of existing pattern** → widen the existing regex rather than duplicating
+- `cd` segment → covered once by the project's `cd` pattern (already in defaults).
+- `git status` → covered by the `git (status|log|diff|show)` pattern.
+- `git diff ...` → same pattern.
+
+If a needed pattern is missing, add it. If an existing pattern almost covers it, widen the alternation rather than duplicating.
 
 **Pattern conventions:**
-- Use `^${P}` prefix (optional `cd <project> &&`) so bare and prefixed forms both match
-- Use the `'s'` flag when the command can span multiple lines (heredocs)
-- Block `;` injection in read-only patterns with `[^;\\n]*$` instead of `.*`
-- Block `>` redirection in read-only patterns: `(?:[^>;\\n]|"[^"\\n]*")*$`
-- Block `--force` with a negative lookahead: `(?!.*--force)`
+- Match a **single** bare command — no `&&`, `;`, `|`, `>`, `$(...)`, backticks. The parser handles those.
+- Anchor with `^` and `$`.
+- Restrict argument shapes. `\S+` is fine for path-like args; for branches / refs / messages, prefer specific character classes.
+- For paths that may contain spaces, accept quoted forms: `(?:"[^"\n]+"|'[^'\n]+'|\S+)`.
+- For commands that legitimately accept a free-form message via `-m`, accept double-quoted text: `-m "[^"\n]+"`.
+- Avoid `.*` and `(?:.*)`. Be specific about what's allowed inside an argument.
 
 **Example — adding a new family:**
 ```js
-// git switch / checkout branch
-new RegExp(`^${P}git (?:switch|checkout) (?!--(?:theirs|ours))[^;\\n]*$`),
+// docker read-only verbs
+/^docker (?:ps|info|context|images|logs)(?:\s+\S+)*$/,
 ```
 
-## Step 3 — Add Test Case to `approve-commands.test.js`
+**Example — widening an existing one:**
+```js
+// before
+/^git (?:status|log|diff|show)(?:\s+\S+)*$/,
+// after (added `branch`, `remote`)
+/^git (?:status|log|diff|show|branch|remote)(?:\s+\S+)*$/,
+```
 
-Add the exact command (or a representative form of it) to the `SHOULD_APPROVE` array:
+## Step 3 — Add a test case
+
+In `approve-commands.test.js`, add the **representative** command form to `SHOULD_APPROVE`:
 
 ```js
-['git switch — bare', 'git switch feature/foo'],
-['git switch — with cd', 'cd /e/projects/ImageUncovered && git switch main'],
+['docker ps -a', 'docker ps -a'],
+['cd && docker ps', 'cd /tmp && docker ps'],
 ```
 
-If the command has a dangerous variant that should still be rejected, add it to `SHOULD_REJECT` too.
+When the new pattern has a dangerous near-neighbour (e.g. `docker rm`), add it to `SHOULD_REJECT` to lock the boundary:
 
-## Step 4 — Run Tests Until Green
+```js
+['docker rm — must reject', 'docker rm my-container'],
+```
+
+You don't need to add tests for shell-injection variants of your new verb — `git status && rm`, `git status | sh`, `git status > /tmp/leak`, etc. are already covered by the core suite once and apply to every pattern.
+
+## Step 4 — Run tests until green
 
 ```bash
 node .claude/hooks/approve-commands.test.js
@@ -90,19 +119,31 @@ Repeat fix → run until output ends with `N tests — N passed, 0 failed`.
 
 | Symptom | Fix |
 |---|---|
-| SHOULD_APPROVE fails | Pattern too strict — broaden regex or add `'s'` flag |
-| SHOULD_REJECT fails (approved when shouldn't) | Pattern too broad — add negative lookahead or anchor |
-| `;` injection passes | Missing `[^;\\n]*$` on read-only pattern |
-| Heredoc not matched | Missing `'s'` flag |
-| `--force` variant approved | Missing `(?!.*--force)` lookahead |
+| SHOULD_APPROVE fails for `cd X && cmd` | The `cmd` segment doesn't match. Don't try to include `cd` in the pattern — both segments are matched independently. Make sure `cd` and the second verb each have a matching pattern. |
+| SHOULD_APPROVE fails for `cmd "..."` | Pattern doesn't accept the quoted argument shape. Add a `"[^"\n]+"` alternative. |
+| SHOULD_REJECT fails (your pattern is over-broad) | Tighten with explicit alternation instead of `\S+`, or add anchors around safe sub-shapes. |
+| New verb works but a `cmd1 && cmd2` chain still rejected | `cmd2` isn't in any pattern. Add it (or this command shouldn't be auto-approved). |
 
-## Quick Reference
+## What you no longer need to worry about
 
-| Goal | Regex ingredient |
+These used to live in patterns; they now live in the parser and are tested centrally:
+
+- `;` injection
+- `&&` injection (the old hole this skill was rewritten to fix)
+- `|` injection
+- `>` redirect
+- `$(...)` and backticks
+- heredocs
+- background `&`
+
+You should not add `[^;\\n]*$` style guards to your patterns — they're dead weight now.
+
+## Quick reference
+
+| Goal | Pattern shape |
 |---|---|
-| Optional cd prefix | `^${P}` |
-| Multi-line (heredoc) | `'s'` flag |
-| Block `;` injection | `[^;\\n]*$` |
-| Block `>` redirect | `(?:[^>;\\n]\|"[^"\\n]*")*$` |
-| Block `--force` | `(?!.*--force)` |
-| Block `--hard` | `(?!.*--hard)` |
+| Single bare command, no args | `/^npm ci$/` |
+| Bare command + free-form args | `/^npm test(?:\s+\S+)*$/` |
+| Subcommand alternation | `/^git (?:status\|log\|diff\|show)(?:\s+\S+)*$/` |
+| Path argument (quoted or bare) | `/^cd (?:"[^"\n]+"\|'[^'\n]+'\|\S+)$/` |
+| Free-form `-m "..."` message | `/^git commit -m "[^"\n]+"$/` |

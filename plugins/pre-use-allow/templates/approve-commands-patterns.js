@@ -1,24 +1,31 @@
 // Source of truth for auto-approved Bash commands.
-// Add new patterns by running /pre-use-allow:pre-use-allow-run, or by hand
-// using the pre-use-allow skill workflow.
 //
-// Conventions (see SKILL.md for full reference):
-//   - Use ^${P} as the prefix (P below) so a bare command and a `cd <project> && ...`
-//     prefixed form both match.
-//   - Use the 's' flag if the command can span multiple lines (heredocs).
-//   - Block `;` injection in read-only patterns with [^;\n]*$ instead of .*.
-//   - Block `>` redirection in read-only patterns: (?:[^>;\n]|"[^"\n]*")*$.
-//   - Block --force / --hard with negative lookaheads when relevant.
+// Each pattern in `segmentPatterns` matches a SINGLE bash command — no shell
+// operators inside (&&, ||, ;, |, >, <, $(...), `...`, &). The hook splits
+// the full command string and applies these patterns per pipe component.
+// If every pipe component of every sequence segment matches a pattern, the
+// command is approved.
+//
+// Conventions (see skills/pre-use-allow/SKILL.md for full reference):
+//   - Match the bare command only. Do not try to include `cd X && ...` —
+//     the host splits that into two segments (`cd X` and the next one) and
+//     runs each through the patterns separately. The `cd` pattern below
+//     covers the prefix once for all approved commands.
+//   - Anchor with ^ and $ on every pattern.
+//   - Restrict argument shapes. Bare `\S+` is fine for path-like args;
+//     prefer specific character classes for refs, branches, and messages.
+//   - You no longer need to block ;, &, |, > inside patterns — the parser
+//     rejects them at the structural level.
 
-// Optional `cd <anything> && ` prefix.
-const P = '(?:cd [^\\n;]+ && )?';
+const segmentPatterns = [
+  // cd to any path (quoted or unquoted; unquoted must not contain whitespace)
+  /^cd (?:"[^"\n]+"|'[^'\n]+'|\S+)$/,
 
-const patterns = [
-  // git status / log / diff (read-only)
-  new RegExp(`^${P}git (?:status|log|diff)(?:[^;\\n>]|"[^"\\n]*")*$`),
+  // read-only git verbs with arbitrary flag-and-arg tails
+  /^git (?:status|log|diff|show)(?:\s+\S+)*$/,
 
-  // node --version, node -v
-  new RegExp(`^${P}node (?:--version|-v)$`),
+  // node version
+  /^node (?:--version|-v)$/,
 ];
 
-module.exports = { patterns, P };
+module.exports = { segmentPatterns };

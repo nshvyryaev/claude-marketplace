@@ -1,0 +1,37 @@
+[
+  {
+    "__type__": "cc.Prefab",
+    "_name": "mini",
+    "_objFlags": 0,
+    "_native": "",
+    "data": { "__id__": 1 }
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "mini",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": null,
+    "_children": [],
+    "_active": true,
+    "_components": [{ "__id__": 2 }],
+    "_prefab": null,
+    "_lpos": { "__type__": "cc.Vec3", "x": 0, "y": 0, "z": 0 },
+    "_lrot": { "__type__": "cc.Quat", "x": 0, "y": 0, "z": 0, "w": 1 },
+    "_lscale": { "__type__": "cc.Vec3", "x": 1, "y": 1, "z": 1 },
+    "_layer": 1073741824,
+    "_euler": { "__type__": "cc.Vec3", "x": 0, "y": 0, "z": 0 },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.Animation",
+    "_name": "",
+    "_objFlags": 0,
+    "node": { "__id__": 1 },
+    "_enabled": true,
+    "playOnLoad": false,
+    "_clips": [],
+    "_defaultClip": null,
+    "_id": ""
+  }
+]

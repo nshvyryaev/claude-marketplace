@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Read project's observed.jsonl + approve-commands-patterns.js, print one JSON
-// line per UNCOVERED Bash command (i.e. not yet matched by any pattern), sorted
-// by frequency desc. Used by /pre-use-allow:pre-use-allow-run.
+// Read the project's observed.jsonl + approve-commands-{core,patterns}.js,
+// print one JSON line per UNCOVERED Bash command (i.e. not yet matched by the
+// project's per-segment patterns), sorted by frequency desc. Used by
+// /pre-use-allow:pre-use-allow-run.
 //
 // Project root is resolved from CLAUDE_PROJECT_DIR (set by Claude Code), with
 // process.cwd() as fallback. Malformed JSONL lines are skipped, not fatal.
@@ -10,17 +11,25 @@ const fs = require('fs');
 const path = require('path');
 
 const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const corePath = path.join(projectRoot, '.claude', 'hooks', 'approve-commands-core.js');
 const patternsPath = path.join(projectRoot, '.claude', 'hooks', 'approve-commands-patterns.js');
 const observedPath = path.join(projectRoot, '.claude', 'pre-use-allow', 'observed.jsonl');
 
-let patterns;
-try { ({ patterns } = require(patternsPath)); }
+let isApproved;
+try { ({ isApproved } = require(corePath)); }
+catch (e) {
+  process.stderr.write(`filter-observed: cannot load ${corePath}: ${e.message}\n`);
+  process.exit(1);
+}
+
+let segmentPatterns;
+try { ({ segmentPatterns } = require(patternsPath)); }
 catch (e) {
   process.stderr.write(`filter-observed: cannot load ${patternsPath}: ${e.message}\n`);
   process.exit(1);
 }
-if (!Array.isArray(patterns)) {
-  process.stderr.write(`filter-observed: ${patternsPath} did not export a 'patterns' array\n`);
+if (!Array.isArray(segmentPatterns)) {
+  process.stderr.write(`filter-observed: ${patternsPath} did not export a 'segmentPatterns' array\n`);
   process.exit(1);
 }
 
@@ -42,7 +51,7 @@ for (const line of raw.split('\n')) {
 }
 
 const uncovered = [...seen.entries()]
-  .filter(([cmd]) => !patterns.some((p) => p.test(cmd)))
+  .filter(([cmd]) => !isApproved(cmd, segmentPatterns))
   .sort((a, b) => b[1].count - a[1].count);
 
 for (const [cmd, { count }] of uncovered) {

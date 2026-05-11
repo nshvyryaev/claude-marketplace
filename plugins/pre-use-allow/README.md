@@ -1,9 +1,15 @@
 # pre-use-allow
 
-PreToolUse Bash auto-approval workflow. Two parts:
+PreToolUse Bash auto-approval workflow with a parser-based check so per-command patterns can stay simple and safe.
 
-1. **Per-project pattern hook** (`approve-commands.js`) — auto-approves Bash commands matching a regex list in `approve-commands-patterns.js`. The list grows over time, project by project.
-2. **Observation + promotion** — a PostToolUse hook records every executed Bash command into `observed.jsonl`. The `/pre-use-allow:pre-use-allow-run` slash command reads that log, filters out already-covered commands, and promotes the user-selected ones into the pattern list (with a fresh test case each).
+Two parts:
+
+1. **Per-project hook** (`approve-commands.js` + `approve-commands-core.js`) — parses each Bash command into sequence segments (`&&`, `||`, `;`) and pipe components (`|`), rejects unsafe shell constructs (`$(...)`, backticks, redirects, heredocs, background, subshells), and requires every component to match a per-segment pattern from `approve-commands-patterns.js`. Patterns grow project by project.
+2. **Observation + promotion** — a PostToolUse hook records every executed Bash command into `observed.jsonl`. The `/pre-use-allow:pre-use-allow-run` slash command reads that log, filters out already-covered commands (using the same parser the hook uses), and promotes the user-selected ones into the pattern list (with a fresh test case each).
+
+## Why the parser
+
+Earlier versions of this plugin asked each regex to handle both the shell structure (no `;`, no `>`, no `&&` injection) and the command verb. That left a class of leaks — e.g. `git status && rm -rf /tmp/foo` could be accidentally approved because the regex tail `(?:[^;\n>]|"[^"\n]*")*$` permitted `&&`. Splitting structural parsing out of the patterns makes those leaks impossible: the parser refuses any `&&`-chained segment whose verb isn't in the per-segment whitelist, and refuses redirects/substitutions outright.
 
 ## Install
 
@@ -17,9 +23,16 @@ PreToolUse Bash auto-approval workflow. Two parts:
 /pre-use-allow:pre-use-allow-init
 ```
 
-Copies the hook scaffold into `.claude/hooks/` and prints the settings.json snippet you need to merge.
+Copies four files to `.claude/hooks/`:
 
-## Promote observed commands
+- `approve-commands-core.js` — parser + decision (do not edit per-project)
+- `approve-commands.js` — hook entry point
+- `approve-commands-patterns.js` — `segmentPatterns: RegExp[]`, the project's whitelist
+- `approve-commands.test.js` — test suite
+
+…and prints the `settings.json` snippet you need to merge.
+
+## Grow the patterns
 
 After working in the project for a while, run:
 
@@ -27,15 +40,32 @@ After working in the project for a while, run:
 /pre-use-allow:pre-use-allow-run
 ```
 
-It shows uncovered commands sorted by frequency, you pick which to whitelist, the slash command grows the pattern file and adds tests.
+It shows uncovered commands sorted by frequency, you pick which to whitelist, the slash command grows `approve-commands-patterns.js` and adds tests.
+
+You can also ask Claude directly: "разреши команду X" / "allow X" — the `pre-use-allow` skill picks up the request, runs the safety check, adds the per-segment pattern, and verifies tests are green.
 
 ## What's inside
 
 - `skills/pre-use-allow/SKILL.md` — the workflow Claude follows when growing patterns by hand.
-- `templates/` — files copied to project's `.claude/hooks/` by init.
+- `templates/` — files copied into `.claude/hooks/` by init.
+  - `approve-commands-core.js`
+  - `approve-commands.js`
+  - `approve-commands-patterns.js`
+  - `approve-commands.test.js`
+  - `observe-commands.js`
 - `commands/pre-use-allow-init.md` — `/pre-use-allow:pre-use-allow-init`.
 - `commands/pre-use-allow-run.md` — `/pre-use-allow:pre-use-allow-run`.
+- `scripts/filter-observed.js` — used by the run command; imports the project's `approve-commands-core.js` and `approve-commands-patterns.js` to identify uncovered observations.
+
+## Migration from 0.1.x → 0.2.0
+
+The patterns file format changed:
+
+- **Before:** `module.exports = { patterns: [/full-regex/, ...] }` where each regex had to cover an entire command string including any `cd ... &&` prefix and had to defensively block `;`, `&`, `|`, `>`.
+- **After:** `module.exports = { segmentPatterns: [/single-bare-command/, ...] }` where each regex matches one segment after parsing. No defensive operator-blocking inside patterns — the parser handles it.
+
+If you upgrade an existing project, run `/pre-use-allow:pre-use-allow-init` again to install the new core file, then rewrite `approve-commands-patterns.js` to the new shape. The `filter-observed.js` helper prints a clear error if it finds the legacy `patterns` export, pointing you at this migration.
 
 ## Version
 
-`0.1.0`
+`0.2.0`

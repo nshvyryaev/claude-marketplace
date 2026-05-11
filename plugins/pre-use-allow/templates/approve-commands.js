@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// PreToolUse hook for Bash. Auto-approves commands matching any pattern in
-// approve-commands-patterns.js; otherwise stays neutral so Claude Code prompts the user.
+// PreToolUse hook for Bash. Auto-approves a command when every segment of it
+// matches a per-segment whitelist pattern; otherwise stays neutral so Claude
+// Code falls back to its usual permission flow.
 //
-// This file is the entry point. Patterns live in approve-commands-patterns.js
-// (single source of truth, also imported by approve-commands.test.js).
+// All structural work (splitting by &&, ||, ;, |, rejecting $(...), backticks,
+// redirects, heredocs, subshells, background) lives in approve-commands-core.js.
+// Patterns live in approve-commands-patterns.js.
 
 const path = require('path');
 
@@ -18,19 +20,27 @@ process.stdin.on('end', () => {
   const cmd = input?.tool_input?.command;
   if (typeof cmd !== 'string') { process.stdout.write('{}'); return; }
 
-  // Load patterns lazily so a missing/broken patterns module degrades to neutral
-  // instead of crashing every Bash invocation.
-  let patterns;
-  try { ({ patterns } = require(path.join(__dirname, 'approve-commands-patterns.js'))); }
-  catch { process.stdout.write('{}'); return; }
-  if (!Array.isArray(patterns)) { process.stdout.write('{}'); return; }
+  // Load core + patterns lazily so a missing/broken file degrades to neutral
+  // (Claude Code will prompt the user) instead of crashing every Bash call.
+  let isApproved, segmentPatterns;
+  try {
+    ({ isApproved } = require(path.join(__dirname, 'approve-commands-core.js')));
+    ({ segmentPatterns } = require(path.join(__dirname, 'approve-commands-patterns.js')));
+  } catch {
+    process.stdout.write('{}');
+    return;
+  }
+  if (typeof isApproved !== 'function' || !Array.isArray(segmentPatterns)) {
+    process.stdout.write('{}');
+    return;
+  }
 
-  if (patterns.some((p) => p.test(cmd))) {
+  if (isApproved(cmd, segmentPatterns)) {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'allow',
-        permissionDecisionReason: 'Matched a pre-use-allow pattern',
+        permissionDecisionReason: 'Matched pre-use-allow per-segment patterns',
       },
     }));
     return;

@@ -10,13 +10,16 @@ Install the pre-use-allow scaffold into the current project. Always confirms wit
 
 1. **Confirm with user.** State you are about to create files in `<project-root>/.claude/hooks/` and `<project-root>/.claude/pre-use-allow/`. Ask for confirmation. Stop if denied.
 
-2. **Copy the four template files** from `${CLAUDE_PLUGIN_ROOT}/templates/` to `<project-root>/.claude/hooks/`:
-   - `approve-commands.js`
-   - `approve-commands-patterns.js`
-   - `approve-commands.test.js`
-   - `observe-commands.js`
+2. **Copy the five template files** from `${CLAUDE_PLUGIN_ROOT}/templates/` to `<project-root>/.claude/hooks/`:
+   - `approve-commands-core.js` — parser + decision logic (treat as plugin code; project should not edit)
+   - `approve-commands.js` — hook entry point
+   - `approve-commands-patterns.js` — per-project `segmentPatterns` whitelist
+   - `approve-commands.test.js` — test suite for the patterns
+   - `observe-commands.js` — PostToolUse logger
 
    For each: if the destination already exists, do NOT overwrite. Print a unified diff (`diff -u`) and ask the user how to proceed (skip / overwrite / merge by hand). Default is skip.
+
+   Exception: `approve-commands-core.js` is plugin code, not project code. If it already exists and differs from the template, recommend overwriting (after showing the diff) so the project picks up parser/security fixes. If the user declines, leave it.
 
 3. **Create the observation directory**: `<project-root>/.claude/pre-use-allow/`. Create it if missing.
 

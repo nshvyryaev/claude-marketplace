@@ -5,9 +5,16 @@ description: Working with Cocos Creator scenes and prefabs via Node.js scripts. 
 
 ## Куда писать временные JSON
 
-Все промежуточные JSON-файлы (patches.json, my-spec.json, ops-файлы для `edit-prefab.js`) — кладутся в `tmp/` в корне проекта. Эта папка должна быть в `.gitignore`. Перед первым запуском любого из скриптов убедись:
+Все промежуточные JSON-файлы (patches.json, my-spec.json, ops-файлы для `edit-prefab.js`) — кладутся в **`./tmp/`** относительно cwd проекта (то есть в подпапку `tmp/` корня проекта). Эта папка должна быть в `.gitignore`.
 
-1. Что `tmp/` существует — `mkdir -p tmp` (скрипты с дефолтным выводом создают её сами, но для явных `--patches`/`--spec`/`--ops` путей лучше создать заранее).
+⚠️ **Только относительный путь.** Везде ниже, где встречается `tmp/...`, имеется в виду **`./tmp/...`** — подпапка проекта. НИКОГДА не используй абсолютные пути для этих файлов:
+- ❌ `/tmp/patches.json` — на Windows резолвится в корень текущего диска (`C:\tmp` / `E:\tmp`), требует админ-прав, операция падает или запрашивает повышение.
+- ❌ `C:\tmp\...`, `E:\tmp\...`, `$TMPDIR/...`, `%TEMP%\...` — то же самое, плюс эти пути не привязаны к проекту, файлы потеряются.
+- ✅ `./tmp/patches.json` или `tmp/patches.json` — оба варианта корректны, если cwd = корень проекта. При сомнениях используй явный `./` префикс.
+
+Перед первым запуском любого из скриптов убедись:
+
+1. Что `./tmp/` существует — `mkdir -p ./tmp` (скрипты с дефолтным выводом создают её сами, но для явных `--patches`/`--spec`/`--ops` путей лучше создать заранее).
 2. Что `tmp/` в `.gitignore` — если в файле проекта `.gitignore` нет строки `tmp/`, добавь её. Если `.gitignore` отсутствует — создай и положи туда `tmp/`.
 
 Не пиши в `.claude/` — операции там запрашивают разрешение, и это лишний шум.
@@ -28,6 +35,9 @@ description: Working with Cocos Creator scenes and prefabs via Node.js scripts. 
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js --file <scene/prefab> --node <NodeName> (--meta <meta> \| --type <cc.Type>) [--properties <json>] [--force] [--dry-run]` | Добавляет компонент к существующей ноде в сцене или префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button, cc.Layout и т.п.) |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js --file <scene/prefab> --ops <ops.json> [--dry-run]` | Применяет набор структурных операций (resize-uitransform, **set-position**, create-node, move-component, reparent) по JSON-файлу |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/create-prefab.js --file <prefab> --name <RootName> [--width w] [--height h] [--anchor-x ax] [--anchor-y ay] [--active true\|false] [--sprite-frame uuid@sub] [--sprite-color r,g,b,a] [--dry-run]` | Создаёт новый пустой .prefab файл с корневой нодой и UITransform (опционально — Sprite). |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/create-anim-clip.js --atlas-meta <plist.meta> --name-prefix <prefix> --out <path.anim> [--clip-name n] [--sample 60] [--speed 1] [--wrap-mode 2] [--force] [--dry-run]` | Создаёт `cc.AnimationClip` (.anim + .anim.meta) из спрайт-фреймов атласа `.plist.meta`, отфильтрованных по префиксу имени и отсортированных лексикографически. Выходной clip биндится на `cc.Sprite.spriteFrame`. `--force` разрешает перезапись существующего `.anim`/`.anim.meta` и переиспользует UUID из существующего `.anim.meta` (стабильные ссылки в prefab при регенерации). Полученный `.anim.meta` можно подключать в `cc.Animation._clips` через `@asset:...anim.meta` (auto-resolves в `cc.AnimationClip`). |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-animation-clip.js --file <prefab> --clip-uuid <uuid>` | Идемпотентно добавляет UUID `cc.AnimationClip` в `cc.Animation._clips` существующего префаба. Падает, если в префабе нет `cc.Animation` или их больше одного. Не трогает `_defaultClip`. |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/replace-label-font.js --file <scene/prefab> --font-meta <ttf.meta> [--mode system\|all] [--dry-run]` | Меняет шрифт у `cc.Label` в сцене/префабе. По умолчанию (`--mode system`) трогает только labels с `_isSystemFontUsed: true` (т.е. реально рендерящие системный Arial); ставит им `_font` на указанный TTF и `_isSystemFontUsed: false`. `--mode all` — переписать вообще все labels в файле. `_fontFamily` не трогается. Идемпотентен. |
 
 ## Полный рабочий цикл перевода новых строк
 
@@ -221,7 +231,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
 | `@asset:<path>.meta` | `{ "__uuid__": …, "__expectedType__": <из расширения> }` | `"@asset:assets/prefabs/Enemy.prefab.meta"` |
 | `@asset:<path>.meta:<Type>` | то же, но `__expectedType__` задан явно | `"@asset:assets/img/x.png.meta:cc.SpriteFrame"` |
 
-Автовывод `__expectedType__` по расширению: `.prefab→cc.Prefab`, `.scene→cc.SceneAsset`, `.png/.jpg/.jpeg/.webp→cc.SpriteFrame`, `.ttf/.otf→cc.TTFFont`, `.mp3/.ogg/.wav→cc.AudioClip`, `.json→cc.JsonAsset`, остальное → `cc.Asset`.
+Автовывод `__expectedType__` по расширению: `.prefab→cc.Prefab`, `.scene→cc.SceneAsset`, `.png/.jpg/.jpeg/.webp→cc.SpriteFrame`, `.ttf/.otf→cc.TTFFont`, `.mp3/.ogg/.wav→cc.AudioClip`, `.json→cc.JsonAsset`, `.anim→cc.AnimationClip`, остальное → `cc.Asset`.
 
 Флаги:
 - `--force` — добавить ещё один экземпляр, даже если компонент уже есть на ноде.
@@ -302,6 +312,58 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js \
 # → проверить вывод, затем запустить без --dry-run
 rm tmp/shrink-player.json
 ```
+
+## Создание sprite-frame анимаций
+
+Типичный кейс — есть атлас (`.plist` + `.png` + `.plist.meta` с заполненными `subMetas`), нужно собрать `cc.AnimationClip`, который перебирает фреймы по `cc.Sprite.spriteFrame`, и подключить его в `cc.Animation._clips`.
+
+### create-anim-clip.js — генерация .anim из атласа
+
+```bash
+# Сгенерировать idle.anim из всех фреймов атласа, чьё имя начинается с "dragon-3-idle-"
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/create-anim-clip.js \
+  --atlas-meta assets/resources/pets/dragon/teen/dragon-3-idle.plist.meta \
+  --name-prefix "dragon-3-idle-" \
+  --out         assets/resources/pets/dragon/teen/idle.anim \
+  --speed 0.2
+```
+
+Что делает:
+- Читает атласный `.plist.meta`, фильтрует `subMetas` по `name`-префиксу, сортирует **лексикографически** (поэтому имена должны быть с zero-padding: `…-00, …-01, … -11`).
+- Пишет `cc.AnimationClip` (один `cc.animation.ObjectTrack` на `cc.Sprite.spriteFrame`) и парный `.anim.meta` со свежим UUID v4.
+- Тайминг кадров: `i / sample`. Длительность клипа = `frames * (1 / sample)`. `--speed` — замедление/ускорение воспроизведения.
+
+Дефолты: `sample=60`, `speed=1`, `wrap-mode=2` (loop, `1` = Normal). Для блинков/idle обычно подходит `--speed 0.2` — смотри baby/idle.anim как образец.
+
+По умолчанию скрипт **отказывается перезаписывать** существующий `.anim` или `.anim.meta`. Передай `--force`, чтобы разрешить перезапись — при этом UUID из существующего `.anim.meta` сохранится, поэтому ссылки из префабов на этот клип не сломаются. Это основной режим для пайплайнов, которые регенерируют анимации (см. `tools/sprite-animator/`).
+
+### Подключение клипа в cc.Animation
+
+`.anim.meta` после генерации сразу подключается через `@asset:`:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/resources/pets/dragon/teen.prefab \
+  --node Sprite \
+  --type cc.Animation \
+  --properties '{
+    "playOnLoad": true,
+    "_clips": [
+      "@asset:assets/resources/pets/dragon/teen/idle.anim.meta",
+      "@asset:assets/resources/pets/dragon/teen/idle-blink.anim.meta"
+    ],
+    "_defaultClip": "@asset:assets/resources/pets/dragon/teen/idle.anim.meta"
+  }'
+```
+
+`@asset:...anim.meta` авторесолвится в `{ __uuid__, __expectedType__: "cc.AnimationClip" }`.
+
+### Workflow для нового набора анимаций
+1. В Cocos: положить атлас (`.plist`+`.png`), дождаться, чтобы сгенерировался `.plist.meta` с `subMetas`.
+2. Сгенерировать каждую анимацию: `create-anim-clip.js --atlas-meta ... --name-prefix ... --out ...`.
+3. (Опционально) Если префаб использовал старый атлас — обновить `cc.Sprite._atlas` и `cc.Sprite._spriteFrame` через `patch-component-property.js --type cc.Sprite`.
+4. Добавить или дополнить `cc.Animation` через `add-component.js --type cc.Animation` с `playOnLoad`, `_clips`, `_defaultClip`.
+5. Открыть Cocos Creator: `Project → Refresh` (или просто переключение фокуса) — редактор подхватит новые `.anim`.
 
 ## UUID: КРИТИЧЕСКИ ВАЖНО
 

@@ -35,8 +35,8 @@ Promote observed Bash commands into auto-approval patterns.
 
 6. **For each picked command**, follow the `pre-use-allow` skill workflow:
    - Run the safety check from `${CLAUDE_PLUGIN_ROOT}/skills/pre-use-allow/SKILL.md` Step 1. If unsafe, warn the user and require confirmation.
-   - Add or extend a regex in `<project-root>/.claude/hooks/approve-commands-patterns.js`.
-   - Add a `SHOULD_APPROVE` test case in `<project-root>/.claude/hooks/approve-commands.test.js`.
+   - Parse the command into segments (the same way the hook does) and add or extend a per-segment regex in `<project-root>/.claude/hooks/approve-commands-patterns.js` (`segmentPatterns` array). One pattern per distinct bare command — do NOT include `&&`, `;`, `|`, `>`, or `cd ... &&` prefixes in the pattern; the parser handles those.
+   - Add a `SHOULD_APPROVE` test case in `<project-root>/.claude/hooks/approve-commands.test.js` using the original full command string (parser exercise included).
 
 7. **After all selected commands are processed**, run the test suite once:
 

@@ -1,0 +1,28 @@
+{
+  "ver": "1.0.8",
+  "importer": "sprite-atlas",
+  "imported": true,
+  "uuid": "00000000-0000-4000-8000-000000000001",
+  "files": [".json"],
+  "subMetas": {
+    "f00aa": {
+      "importer": "sprite-frame",
+      "uuid": "00000000-0000-4000-8000-000000000001@f00aa",
+      "name": "test-prefix-00",
+      "userData": {}
+    },
+    "f00bb": {
+      "importer": "sprite-frame",
+      "uuid": "00000000-0000-4000-8000-000000000001@f00bb",
+      "name": "test-prefix-01",
+      "userData": {}
+    },
+    "f00cc": {
+      "importer": "sprite-frame",
+      "uuid": "00000000-0000-4000-8000-000000000001@f00cc",
+      "name": "test-prefix-02",
+      "userData": {}
+    }
+  },
+  "userData": {}
+}
