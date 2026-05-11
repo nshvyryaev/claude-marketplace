@@ -131,12 +131,32 @@ These used to live in patterns; they now live in the parser and are tested centr
 - `;` injection
 - `&&` injection (the old hole this skill was rewritten to fix)
 - `|` injection
-- `>` redirect
 - `$(...)` and backticks
-- heredocs
+- heredocs (`<<EOF`) and here-strings (`<<<`)
 - background `&`
+- redirects to real files (`> file`, `>> file`, `< file`, `2> file`, `&> file`)
 
 You should not add `[^;\\n]*$` style guards to your patterns — they're dead weight now.
+
+## Safe redirect carve-outs
+
+The parser **does** allow two specific redirect families because they are not
+disk writes and are commonly used in diagnostic pipelines:
+
+- **FD duplication**: `2>&1`, `1>&2`, `>&2`, `<&0`, etc. — duplicates one file
+  descriptor onto another. No file is created.
+- **Null sink**: `> /dev/null`, `2> /dev/null`, `&> /dev/null` (with or without
+  whitespace before `/dev/null`).
+
+The parser consumes the redirect specifier and removes any leading `1` or `2`
+file-descriptor digit from the buffer, so your pattern sees the bare command.
+That is: `npm test 2>&1 | tail -40` parses to `[['npm test', 'tail -40']]`
+and your `^npm test...$` pattern still matches.
+
+Forms that **remain rejected**:
+- `> file`, `>> file`, `< file` to anything that isn't `/dev/null`
+- `<<EOF`, `<<<string`
+- `&>> file` (append form of &>)
 
 ## Quick reference
 

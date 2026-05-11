@@ -24,6 +24,44 @@ const STATE_PLAIN = 'plain';
 const STATE_SINGLE = 'single';
 const STATE_DOUBLE = 'double';
 
+// Characters that legitimately terminate a redirect target token.
+const REDIRECT_END = /[\s|;&<>]/;
+
+// Try to consume a safe `>` or `<` redirect starting at cmd[i]. Returns the
+// number of characters consumed (>= 2), or 0 if the redirect isn't safe.
+// Safe forms (whitespace before target is allowed):
+//   >&\d+  / <&\d+   — FD duplication (e.g. 2>&1, >&2, <&0)
+//   >/dev/null / </dev/null — null sink
+function consumeRedirect(cmd, i) {
+  let j = i + 1;
+  while (cmd[j] === ' ') j++;
+  if (cmd[j] === '&' && /\d/.test(cmd[j + 1])) {
+    let k = j + 2;
+    while (/\d/.test(cmd[k])) k++;
+    const after = cmd[k] || '';
+    if (after === '' || REDIRECT_END.test(after)) return k - i;
+    return 0;
+  }
+  if (cmd.startsWith('/dev/null', j)) {
+    const after = cmd[j + 9] || '';
+    if (after === '' || REDIRECT_END.test(after)) return j + 9 - i;
+  }
+  return 0;
+}
+
+// Try to consume `&>` (or `&>>` — rejected) starting at cmd[i].
+// Safe form: &>/dev/null (with optional whitespace before target).
+function consumeAmpRedirect(cmd, i) {
+  if (cmd[i + 2] === '>') return 0; // &>> append — reject
+  let j = i + 2;
+  while (cmd[j] === ' ') j++;
+  if (cmd.startsWith('/dev/null', j)) {
+    const after = cmd[j + 9] || '';
+    if (after === '' || REDIRECT_END.test(after)) return j + 9 - i;
+  }
+  return 0;
+}
+
 // Parse a bash command into an array of sequence segments. Returns
 // { ok: true, segments: string[][] } on success, where each outer item is a
 // sequence-step (separated by &&, ||, ;) and each inner item is a pipe
@@ -78,8 +116,8 @@ function parseAndSplit(cmd) {
 
     if (c === '$' && next === '(') return { ok: false, reason: 'command substitution $(...) is not allowed' };
     if (c === '`') return { ok: false, reason: 'backtick substitution is not allowed' };
-    if (c === '<' && next === '<') return { ok: false, reason: 'heredoc (<<) is not allowed' };
-    if (c === '>' || c === '<') return { ok: false, reason: `redirect (${c}) is not allowed` };
+    if (c === '<' && next === '<') return { ok: false, reason: 'heredoc / here-string (<<) is not allowed' };
+    if (c === '>' && next === '>') return { ok: false, reason: 'append redirect (>>) is not allowed' };
     if (c === '(' || c === ')') return { ok: false, reason: 'subshell ( ) is not allowed' };
     if (c === '{' || c === '}') return { ok: false, reason: 'group { } is not allowed' };
     if (c === '\n') return { ok: false, reason: 'newline in command is not allowed' };
@@ -89,9 +127,26 @@ function parseAndSplit(cmd) {
       i++;
       continue;
     }
+    // bash `&>` — redirect both stdout+stderr. Allowed only to /dev/null.
+    if (c === '&' && next === '>') {
+      const consumed = consumeAmpRedirect(cmd, i);
+      if (consumed > 0) { i += consumed - 1; continue; }
+      return { ok: false, reason: '&> redirect to file is not allowed (only &>/dev/null)' };
+    }
     if (c === '&') return { ok: false, reason: 'background (&) is not allowed' };
     if (c === ';') { flushSegment(); continue; }
     if (c === '|') { flushBuf(); continue; }
+    // Single > or < — allow only safe FD-dup (>&N, <&N) or /dev/null sink.
+    if (c === '>' || c === '<') {
+      const consumed = consumeRedirect(cmd, i);
+      if (consumed > 0) {
+        // FD prefix (1 or 2) was part of buf — strip it.
+        if (/[12]$/.test(buf)) buf = buf.slice(0, -1);
+        i += consumed - 1;
+        continue;
+      }
+      return { ok: false, reason: `redirect (${c}) to file is not allowed` };
+    }
 
     buf += c;
   }

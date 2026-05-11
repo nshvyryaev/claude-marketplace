@@ -68,4 +68,6 @@ If you upgrade an existing project, run `/pre-use-allow:pre-use-allow-init` agai
 
 ## Version
 
-`0.3.0` — adds decision-aware observation: `observed.jsonl` now contains only commands the user manually approved (each entry tagged `decision: "user-approved"`). Auto-approved-by-hook commands and user-denied commands are not logged.
+`0.4.0` — parser carve-out for safe redirects: `2>&1`, FD duplication (`>&N`, `<&N`), and `/dev/null` sinks (`> /dev/null`, `2> /dev/null`, `&> /dev/null`) are now consumed by the parser instead of rejected. Common diagnostic pipelines like `npm test 2>&1 | tail -40` and `find . 2>/dev/null | head -5` auto-approve when both segments match patterns. Redirects to real files remain rejected.
+
+`0.3.0` — decision-aware observation: `observed.jsonl` contains only commands the user manually approved (each entry tagged `decision: "user-approved"`). Auto-approved-by-hook commands and user-denied commands are not logged.
