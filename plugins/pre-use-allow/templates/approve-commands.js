@@ -7,14 +7,18 @@
 // redirects, heredocs, subshells, background) lives in approve-commands-core.js.
 // Patterns live in approve-commands-patterns.js.
 //
-// As a side effect, this hook writes its verdict to
-//   <project-root>/.claude/pre-use-allow/last-decision.json
-// so the PostToolUse observer can tell auto-approved commands apart from
-// commands that went through a user prompt. The observer logs only the latter
-// to observed.jsonl.
+// As a side effect, this hook appends its verdict for the current tool call
+// to .claude/pre-use-allow/decisions.jsonl. The PostToolUse observer reads
+// that file, finds its own entry by tool_use_id, and decides whether to log
+// the command to observed.jsonl. Keying by tool_use_id (instead of by the
+// command string in a singleton file) makes the mechanism race-free under
+// long-running and interleaved tool calls.
 
 const fs = require('fs');
 const path = require('path');
+
+const GC_MIN_LINES = 200;
+const GC_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -26,6 +30,7 @@ process.stdin.on('end', () => {
   if (input?.tool_name !== 'Bash') { process.stdout.write('{}'); return; }
   const cmd = input?.tool_input?.command;
   if (typeof cmd !== 'string') { process.stdout.write('{}'); return; }
+  const toolUseId = typeof input?.tool_use_id === 'string' ? input.tool_use_id : '';
 
   // Load core + patterns lazily so a missing/broken file degrades to neutral
   // (Claude Code will prompt the user) instead of crashing every Bash call.
@@ -34,18 +39,18 @@ process.stdin.on('end', () => {
     ({ isApproved } = require(path.join(__dirname, 'approve-commands-core.js')));
     ({ segmentPatterns } = require(path.join(__dirname, 'approve-commands-patterns.js')));
   } catch {
-    writeDecision(cmd, 'neutral');
+    recordDecision(toolUseId, cmd, 'neutral');
     process.stdout.write('{}');
     return;
   }
   if (typeof isApproved !== 'function' || !Array.isArray(segmentPatterns)) {
-    writeDecision(cmd, 'neutral');
+    recordDecision(toolUseId, cmd, 'neutral');
     process.stdout.write('{}');
     return;
   }
 
   if (isApproved(cmd, segmentPatterns)) {
-    writeDecision(cmd, 'allow');
+    recordDecision(toolUseId, cmd, 'allow');
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
@@ -55,20 +60,48 @@ process.stdin.on('end', () => {
     }));
     return;
   }
-  writeDecision(cmd, 'neutral');
+  recordDecision(toolUseId, cmd, 'neutral');
   process.stdout.write('{}');
 });
 
-function writeDecision(cmd, verdict) {
+function recordDecision(toolUseId, cmd, verdict) {
   try {
     const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
     const dir = path.join(root, '.claude', 'pre-use-allow');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, 'last-decision.json'),
-      JSON.stringify({ ts: new Date().toISOString(), cmd, verdict }) + '\n'
-    );
+    const filePath = path.join(dir, 'decisions.jsonl');
+    const line = JSON.stringify({
+      tool_use_id: toolUseId,
+      ts: new Date().toISOString(),
+      cmd,
+      verdict,
+    }) + '\n';
+    fs.appendFileSync(filePath, line);
+    maybeGc(filePath);
   } catch {
     // best-effort — never fail the hook for an observer-side concern
+  }
+}
+
+function maybeGc(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const lines = raw.split('\n').filter(Boolean);
+    if (lines.length < GC_MIN_LINES) return;
+    const cutoff = Date.now() - GC_MAX_AGE_MS;
+    const kept = [];
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line);
+        if (new Date(obj.ts).getTime() >= cutoff) kept.push(line);
+      } catch {
+        // drop unparseable lines during GC
+      }
+    }
+    const tmp = filePath + '.tmp';
+    fs.writeFileSync(tmp, kept.length ? kept.join('\n') + '\n' : '');
+    fs.renameSync(tmp, filePath);
+  } catch {
+    // best-effort
   }
 }

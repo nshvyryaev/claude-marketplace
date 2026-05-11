@@ -27,12 +27,16 @@ Install the pre-use-allow scaffold into the current project. Always confirms wit
 
    ```
    observed.jsonl
+   decisions.jsonl
    last-decision.json
    ```
 
-   `last-decision.json` is a per-tool-call scratch file written by the
-   PreToolUse hook so the PostToolUse observer can tell auto-approved
-   commands from user-approved ones. It should not be committed.
+   `decisions.jsonl` is a scratch log written by the PreToolUse hook — one
+   line per tool call with the verdict keyed by `tool_use_id`. The
+   PostToolUse observer reads it to tell auto-approved commands from
+   user-approved ones. `last-decision.json` is the legacy single-entry file
+   from 0.3.x; if you're upgrading, the new hooks ignore it and you can
+   delete the file by hand. None of these should be committed.
 
 5. **Print the settings.json snippet** the user must add to `<project-root>/.claude/settings.json`. Do NOT edit settings.json automatically — it may have other entries you'd clobber. Snippet:
 

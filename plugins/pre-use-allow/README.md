@@ -5,7 +5,7 @@ PreToolUse Bash auto-approval workflow with a parser-based check so per-command 
 Two parts:
 
 1. **Per-project hook** (`approve-commands.js` + `approve-commands-core.js`) — parses each Bash command into sequence segments (`&&`, `||`, `;`) and pipe components (`|`), rejects unsafe shell constructs (`$(...)`, backticks, redirects, heredocs, background, subshells), and requires every component to match a per-segment pattern from `approve-commands-patterns.js`. Patterns grow project by project.
-2. **Decision-aware observation** — a PostToolUse hook records each Bash command into `observed.jsonl` **only when it went through a user prompt** (i.e. the PreToolUse hook stayed neutral and the user manually approved). Auto-approved commands are skipped — they are already covered. PreToolUse writes its verdict to a scratch `last-decision.json`; PostToolUse reads it and decides whether to log. The `/pre-use-allow:pre-use-allow-run` slash command reads `observed.jsonl`, filters out already-covered commands (using the same parser the hook uses), and promotes the user-selected ones into the pattern list (with a fresh test case each).
+2. **Decision-aware observation** — a PostToolUse hook records each Bash command into `observed.jsonl` **only when it went through a user prompt** (i.e. the PreToolUse hook stayed neutral and the user manually approved). Auto-approved commands are skipped — they are already covered. PreToolUse appends a per-tool-call entry (keyed by `tool_use_id`) to `decisions.jsonl`; PostToolUse looks up its own entry there and decides whether to log. Keying by `tool_use_id` makes the mechanism race-free under long-running and interleaved tool calls. The `/pre-use-allow:pre-use-allow-run` slash command reads `observed.jsonl`, filters out already-covered commands (using the same parser the hook uses), and promotes the user-selected ones into the pattern list (with a fresh test case each).
 
 ## Why the parser
 
@@ -67,6 +67,8 @@ The patterns file format changed:
 If you upgrade an existing project, run `/pre-use-allow:pre-use-allow-init` again to install the new core file, then rewrite `approve-commands-patterns.js` to the new shape. The `filter-observed.js` helper prints a clear error if it finds the legacy `patterns` export, pointing you at this migration.
 
 ## Version
+
+`0.5.0` — race-free observation log. Decisions are now appended to a multi-entry `decisions.jsonl` keyed by `tool_use_id`, replacing the singleton `last-decision.json` from 0.3.x/0.4.x. Fixes a bug where long-running or interleaved tool calls saw their decision entry overwritten by a later PreToolUse, causing hook-approved commands to be mistakenly logged and user-approved long-running ones to be missed. A cmd-string fallback remains for the older Claude Code shapes that don't pass `tool_use_id`.
 
 `0.4.0` — parser carve-out for safe redirects: `2>&1`, FD duplication (`>&N`, `<&N`), and `/dev/null` sinks (`> /dev/null`, `2> /dev/null`, `&> /dev/null`) are now consumed by the parser instead of rejected. Common diagnostic pipelines like `npm test 2>&1 | tail -40` and `find . 2>/dev/null | head -5` auto-approve when both segments match patterns. Redirects to real files remain rejected.
 
