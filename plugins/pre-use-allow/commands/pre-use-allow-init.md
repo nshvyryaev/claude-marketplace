@@ -23,11 +23,16 @@ Install the pre-use-allow scaffold into the current project. Always confirms wit
 
 3. **Create the observation directory**: `<project-root>/.claude/pre-use-allow/`. Create it if missing.
 
-4. **Write `.claude/pre-use-allow/.gitignore`** (overwrite OK, single line):
+4. **Write `.claude/pre-use-allow/.gitignore`** (overwrite OK):
 
    ```
    observed.jsonl
+   last-decision.json
    ```
+
+   `last-decision.json` is a per-tool-call scratch file written by the
+   PreToolUse hook so the PostToolUse observer can tell auto-approved
+   commands from user-approved ones. It should not be committed.
 
 5. **Print the settings.json snippet** the user must add to `<project-root>/.claude/settings.json`. Do NOT edit settings.json automatically — it may have other entries you'd clobber. Snippet:
 

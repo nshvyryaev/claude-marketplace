@@ -5,7 +5,7 @@ PreToolUse Bash auto-approval workflow with a parser-based check so per-command 
 Two parts:
 
 1. **Per-project hook** (`approve-commands.js` + `approve-commands-core.js`) — parses each Bash command into sequence segments (`&&`, `||`, `;`) and pipe components (`|`), rejects unsafe shell constructs (`$(...)`, backticks, redirects, heredocs, background, subshells), and requires every component to match a per-segment pattern from `approve-commands-patterns.js`. Patterns grow project by project.
-2. **Observation + promotion** — a PostToolUse hook records every executed Bash command into `observed.jsonl`. The `/pre-use-allow:pre-use-allow-run` slash command reads that log, filters out already-covered commands (using the same parser the hook uses), and promotes the user-selected ones into the pattern list (with a fresh test case each).
+2. **Decision-aware observation** — a PostToolUse hook records each Bash command into `observed.jsonl` **only when it went through a user prompt** (i.e. the PreToolUse hook stayed neutral and the user manually approved). Auto-approved commands are skipped — they are already covered. PreToolUse writes its verdict to a scratch `last-decision.json`; PostToolUse reads it and decides whether to log. The `/pre-use-allow:pre-use-allow-run` slash command reads `observed.jsonl`, filters out already-covered commands (using the same parser the hook uses), and promotes the user-selected ones into the pattern list (with a fresh test case each).
 
 ## Why the parser
 
@@ -68,4 +68,4 @@ If you upgrade an existing project, run `/pre-use-allow:pre-use-allow-init` agai
 
 ## Version
 
-`0.2.0`
+`0.3.0` — adds decision-aware observation: `observed.jsonl` now contains only commands the user manually approved (each entry tagged `decision: "user-approved"`). Auto-approved-by-hook commands and user-denied commands are not logged.

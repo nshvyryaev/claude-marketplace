@@ -6,7 +6,14 @@
 // All structural work (splitting by &&, ||, ;, |, rejecting $(...), backticks,
 // redirects, heredocs, subshells, background) lives in approve-commands-core.js.
 // Patterns live in approve-commands-patterns.js.
+//
+// As a side effect, this hook writes its verdict to
+//   <project-root>/.claude/pre-use-allow/last-decision.json
+// so the PostToolUse observer can tell auto-approved commands apart from
+// commands that went through a user prompt. The observer logs only the latter
+// to observed.jsonl.
 
+const fs = require('fs');
 const path = require('path');
 
 let raw = '';
@@ -27,15 +34,18 @@ process.stdin.on('end', () => {
     ({ isApproved } = require(path.join(__dirname, 'approve-commands-core.js')));
     ({ segmentPatterns } = require(path.join(__dirname, 'approve-commands-patterns.js')));
   } catch {
+    writeDecision(cmd, 'neutral');
     process.stdout.write('{}');
     return;
   }
   if (typeof isApproved !== 'function' || !Array.isArray(segmentPatterns)) {
+    writeDecision(cmd, 'neutral');
     process.stdout.write('{}');
     return;
   }
 
   if (isApproved(cmd, segmentPatterns)) {
+    writeDecision(cmd, 'allow');
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
@@ -45,5 +55,20 @@ process.stdin.on('end', () => {
     }));
     return;
   }
+  writeDecision(cmd, 'neutral');
   process.stdout.write('{}');
 });
+
+function writeDecision(cmd, verdict) {
+  try {
+    const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    const dir = path.join(root, '.claude', 'pre-use-allow');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'last-decision.json'),
+      JSON.stringify({ ts: new Date().toISOString(), cmd, verdict }) + '\n'
+    );
+  } catch {
+    // best-effort — never fail the hook for an observer-side concern
+  }
+}
