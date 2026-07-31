@@ -14,7 +14,7 @@ Personal Claude Code plugins.
 
 | Plugin | Description |
 |---|---|
-| [cocos-files-handler](plugins/cocos-files-handler/) | Read/edit Cocos Creator `.scene`/`.prefab` files via safe Node scripts. Blocks direct text edits. |
+| [cocos-files-handler](plugins/cocos-files-handler/) | Read/edit Cocos Creator `.scene`/`.prefab` files via safe Node scripts. Blocks direct text edits. Also carries the Cocos 3.x pitfalls reference and a static checker (`setActive`, `.json` imports, generated tsconfig) wired to a PostToolUse hook. |
 | [pre-use-allow](plugins/pre-use-allow/) | PreToolUse Bash auto-approval workflow. Includes observed-history promotion to grow whitelist over time. |
 
 ## Install a plugin

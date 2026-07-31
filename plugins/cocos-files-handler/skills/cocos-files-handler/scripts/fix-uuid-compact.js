@@ -7,7 +7,7 @@ const NEW_LOCALIZED_TEXT = 'e1910CuNiVLd7GI7d14Kv55';
 const OLD_LOCALIZATION_MGR = 'dfe4b036-9bc8-4081-8ad9-832b5dbb15e6';
 const NEW_LOCALIZATION_MGR = 'dfe4bA2m8hAgYrZgytduxXm';
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const dirs = [path.join(ROOT, 'assets/scenes'), path.join(ROOT, 'assets/prefabs')];
 
 function getFiles(dir) {

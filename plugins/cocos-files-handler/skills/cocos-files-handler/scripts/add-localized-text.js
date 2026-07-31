@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const ROOT_DIR = path.join(__dirname, '..');
+const ROOT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
 function parseArgs() {
     const args = process.argv.slice(2);

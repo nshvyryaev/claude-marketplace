@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
 // ── Russian + English translations for every key used in patches.json ─────────
 // Format: key: [ru, en]

@@ -6,7 +6,7 @@
     {
       "name": "cocos-files-handler",
       "source": "./plugins/cocos-files-handler",
-      "description": "Cocos Creator scenes/prefabs editor with guardrail hook"
+      "description": "Cocos Creator scenes/prefabs editor with guardrail hooks and a static checker for Cocos 3.x TypeScript traps"
     },
     {
       "name": "pre-use-allow",
