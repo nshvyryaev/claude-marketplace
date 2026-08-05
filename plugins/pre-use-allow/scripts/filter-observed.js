@@ -11,9 +11,23 @@ const fs = require('fs');
 const path = require('path');
 
 const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-const corePath = path.join(projectRoot, '.claude', 'hooks', 'approve-commands-core.js');
-const patternsPath = path.join(projectRoot, '.claude', 'hooks', 'approve-commands-patterns.js');
 const observedPath = path.join(projectRoot, '.claude', 'pre-use-allow', 'observed.jsonl');
+
+// The parser lives with the plugin from 0.6.0 on, but a pre-0.6.0 project still vendors its own
+// copy — and while it does, that copy is the one actually deciding, so prefer it.
+const corePath = firstExisting([
+  path.join(projectRoot, '.claude', 'hooks', 'approve-commands-core.js'),
+  path.join(__dirname, '..', 'hooks', 'approve-commands-core.js'),
+]);
+// Same order as the hook's own lookup: canonical project location, then the pre-0.6.0 one.
+const patternsPath = firstExisting([
+  path.join(projectRoot, '.claude', 'pre-use-allow', 'patterns.js'),
+  path.join(projectRoot, '.claude', 'hooks', 'approve-commands-patterns.js'),
+]);
+
+function firstExisting(candidates) {
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
+}
 
 let isApproved;
 try { ({ isApproved } = require(corePath)); }

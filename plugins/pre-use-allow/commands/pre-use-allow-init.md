@@ -1,29 +1,47 @@
 ---
-description: Copy approve-commands hook scaffold and observer into the current project's .claude/hooks/.
+description: Set up pre-use-allow in the current project — creates the project's patterns file and the observation directory.
 ---
 
 # pre-use-allow-init
 
-Install the pre-use-allow scaffold into the current project. Always confirms with the user before any write.
+Opt the current project into pre-use-allow. Always confirms with the user before any write.
+
+**Since 0.6.0 the parser and the PreToolUse entry point ship with the plugin** and are registered
+through `hooks/hooks.json`. They are no longer copied into the project. A project owns exactly one
+file — its patterns — so parser and security fixes arrive with a plugin update instead of going
+stale in each repo.
 
 ## Steps
 
-1. **Confirm with user.** State you are about to create files in `<project-root>/.claude/hooks/` and `<project-root>/.claude/pre-use-allow/`. Ask for confirmation. Stop if denied.
+1. **Confirm with user.** State you are about to create `<project-root>/.claude/pre-use-allow/`
+   with `patterns.js`, `patterns.test.js` and `.gitignore`. Ask for confirmation. Stop if denied.
 
-2. **Copy the five template files** from `${CLAUDE_PLUGIN_ROOT}/templates/` to `<project-root>/.claude/hooks/`:
-   - `approve-commands-core.js` — parser + decision logic (treat as plugin code; project should not edit)
-   - `approve-commands.js` — hook entry point
-   - `approve-commands-patterns.js` — per-project `segmentPatterns` whitelist
-   - `approve-commands.test.js` — test suite for the patterns
-   - `observe-commands.js` — PostToolUse logger
+2. **Detect a pre-0.6.0 install.** If `<project-root>/.claude/hooks/approve-commands.js` exists,
+   the project is on the old vendored scaffold. The plugin hook deliberately **stands down** while
+   that file is present, so the project keeps working untouched. Offer the migration:
 
-   For each: if the destination already exists, do NOT overwrite. Print a unified diff (`diff -u`) and ask the user how to proceed (skip / overwrite / merge by hand). Default is skip.
+   - Move the patterns: `.claude/hooks/approve-commands-patterns.js` →
+     `.claude/pre-use-allow/patterns.js`.
+     - If it exports `segmentPatterns` (0.4.0+), the file moves as-is.
+     - If it exports `APPROVED_PATTERNS` (pre-0.4.0), those are **whole-command** regexes and must
+       be rewritten per-segment by hand — do not mechanically rename the export, it silently
+       changes what each pattern means. Pre-0.4.0 patterns typically also carry a live `&&`
+       injection hole (they block `;` but not `&&`), so flag that to the user.
+   - Delete `.claude/hooks/approve-commands.js`, `approve-commands-core.js` and
+     `approve-commands.test.js`.
+   - Remove the project's `PreToolUse` → `approve-commands.js` entry from `.claude/settings.json`;
+     the plugin registers the hook now.
 
-   Exception: `approve-commands-core.js` is plugin code, not project code. If it already exists and differs from the template, recommend overwriting (after showing the diff) so the project picks up parser/security fixes. If the user declines, leave it.
+   If the user declines the migration, stop — leave the old scaffold in place.
 
-3. **Create the observation directory**: `<project-root>/.claude/pre-use-allow/`. Create it if missing.
+3. **Copy `templates/patterns.js`** to `<project-root>/.claude/pre-use-allow/patterns.js`.
+   If the destination exists, do NOT overwrite: print a `diff -u` and ask (default is skip).
 
-4. **Write `.claude/pre-use-allow/.gitignore`** (overwrite OK):
+4. **Copy `templates/observe-commands.js`** to `<project-root>/.claude/hooks/observe-commands.js`
+   if the user wants the observation log (needed by `/pre-use-allow:pre-use-allow-run`). This one is
+   still project-side, because it is a PostToolUse logger the project may want to customise.
+
+5. **Write `.claude/pre-use-allow/.gitignore`** (overwrite OK):
 
    ```
    observed.jsonl
@@ -31,21 +49,21 @@ Install the pre-use-allow scaffold into the current project. Always confirms wit
    last-decision.json
    ```
 
-   `decisions.jsonl` is a scratch log written by the PreToolUse hook — one
-   line per tool call with the verdict keyed by `tool_use_id`. The
-   PostToolUse observer reads it to tell auto-approved commands from
-   user-approved ones. `last-decision.json` is the legacy single-entry file
-   from 0.3.x; if you're upgrading, the new hooks ignore it and you can
-   delete the file by hand. None of these should be committed.
+   `decisions.jsonl` is a scratch log written by the PreToolUse hook — one line per tool call with
+   the verdict keyed by `tool_use_id`. The PostToolUse observer reads it to tell auto-approved
+   commands from user-approved ones. `last-decision.json` is the legacy single-entry file from
+   0.3.x; the current hooks ignore it and you can delete it. None of these should be committed.
 
-5. **Print the settings.json snippet** the user must add to `<project-root>/.claude/settings.json`. Do NOT edit settings.json automatically — it may have other entries you'd clobber. Snippet:
+   Note the hook only writes `decisions.jsonl` when `.claude/pre-use-allow/` already exists — a
+   project that never ran init produces no log.
+
+6. **Print the settings.json snippet** for the observer only. Do NOT edit settings.json
+   automatically — it may have other entries you'd clobber. **Do not add a PreToolUse entry**; the
+   plugin provides it.
 
    ```json
    {
      "hooks": {
-       "PreToolUse": [
-         { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node .claude/hooks/approve-commands.js" }] }
-       ],
        "PostToolUse": [
          { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node .claude/hooks/observe-commands.js" }] }
        ]
@@ -53,14 +71,14 @@ Install the pre-use-allow scaffold into the current project. Always confirms wit
    }
    ```
 
-   Tell the user: "Merge this with your existing settings.json `hooks` block. If you don't have one, paste this whole object."
-
-6. **Run the test suite** to confirm the scaffold is green:
+7. **Run the project's test suite** to confirm the patterns are green:
 
    ```
-   node .claude/hooks/approve-commands.test.js
+   node .claude/pre-use-allow/patterns.test.js
    ```
 
    Expected: `N tests — N passed, 0 failed`. If red, surface the failure and stop.
 
-7. **Report final state**: which files were created, which were skipped, and the next step (add the snippet to settings.json, then start using `pre-use-allow` skill or `/pre-use-allow:pre-use-allow-run` to grow the patterns).
+8. **Report final state**: which files were created or skipped, whether a pre-0.6.0 scaffold was
+   migrated, and the next step (use the `pre-use-allow` skill or `/pre-use-allow:pre-use-allow-run`
+   to grow the patterns).

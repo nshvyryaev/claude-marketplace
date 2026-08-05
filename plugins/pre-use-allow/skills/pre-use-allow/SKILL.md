@@ -1,6 +1,6 @@
 ---
 name: pre-use-allow
-description: Use when the user wants to allow, permit, whitelist, auto-approve, or stop being prompted for a specific bash command (or family of bash commands) in the project's PreToolUse hook. Triggers on phrasings like "allow X", "permit X", "whitelist X", "auto-approve X", "don't ask for X anymore", "разреши команду X", "разреши в проекте команды вида X", "добавь X в whitelist / в авто-аппрув / в pre-use-allow", "пусть X не спрашивает разрешение". Edits .claude/hooks/approve-commands-patterns.js + adds a passing test. Skill assumes /pre-use-allow:pre-use-allow-init has been run in the project.
+description: Use when the user wants to allow, permit, whitelist, auto-approve, or stop being prompted for a specific bash command (or family of bash commands) in the project's PreToolUse hook. Triggers on phrasings like "allow X", "permit X", "whitelist X", "auto-approve X", "don't ask for X anymore", "разреши команду X", "разреши в проекте команды вида X", "добавь X в whitelist / в авто-аппрув / в pre-use-allow", "пусть X не спрашивает разрешение". Edits the project's .claude/pre-use-allow/patterns.js + adds a passing test. Skill assumes /pre-use-allow:pre-use-allow-init has been run in the project.
 ---
 
 # pre-use-allow
@@ -19,10 +19,21 @@ This means your patterns only describe a single bare command. The parser handles
 
 ## Files
 
-- `.claude/hooks/approve-commands-core.js` — parser + decision logic. **Do not edit** in user projects unless you are also updating the plugin.
-- `.claude/hooks/approve-commands-patterns.js` — `segmentPatterns: RegExp[]` (single source of truth for what is allowed).
-- `.claude/hooks/approve-commands.js` — PreToolUse entry point that wires stdin → core → stdout.
-- `.claude/hooks/approve-commands.test.js` — test suite (imports same core + patterns).
+Since 0.6.0 the hook is served by the plugin; a project owns only its patterns.
+
+**In the project (what you edit):**
+- `.claude/pre-use-allow/patterns.js` — `segmentPatterns: RegExp[]`, the single source of truth for what is allowed.
+- `.claude/pre-use-allow/patterns.test.js` — the project's allow/deny boundary tests.
+
+**In the plugin (do not edit from a user project):**
+- `hooks/approve-commands-core.js` — parser + decision logic.
+- `hooks/approve-commands.js` — PreToolUse entry point, registered via `hooks/hooks.json`.
+
+**Pre-0.6.0 projects** still have the whole scaffold under `.claude/hooks/`. While
+`.claude/hooks/approve-commands.js` exists the plugin hook stands down, so edit
+`.claude/hooks/approve-commands-patterns.js` there and run `.claude/hooks/approve-commands.test.js`.
+Offer `/pre-use-allow:pre-use-allow-init` to migrate — especially if the file exports the pre-0.4.0
+`APPROVED_PATTERNS`, which blocks `;` but **not** `&&`.
 
 ## Workflow
 
@@ -92,7 +103,8 @@ If a needed pattern is missing, add it. If an existing pattern almost covers it,
 
 ## Step 3 — Add a test case
 
-In `approve-commands.test.js`, add the **representative** command form to `SHOULD_APPROVE`:
+In the project's `patterns.test.js` (pre-0.6.0: `approve-commands.test.js`), add the
+**representative** command form to `SHOULD_APPROVE`:
 
 ```js
 ['docker ps -a', 'docker ps -a'],
@@ -110,7 +122,8 @@ You don't need to add tests for shell-injection variants of your new verb — `g
 ## Step 4 — Run tests until green
 
 ```bash
-node .claude/hooks/approve-commands.test.js
+node .claude/pre-use-allow/patterns.test.js      # 0.6.0+
+node .claude/hooks/approve-commands.test.js      # pre-0.6.0 projects
 ```
 
 Repeat fix → run until output ends with `N tests — N passed, 0 failed`.

@@ -11,7 +11,7 @@
     {
       "name": "pre-use-allow",
       "source": "./plugins/pre-use-allow",
-      "description": "PreToolUse Bash auto-approval workflow with observed-history promotion"
+      "description": "PreToolUse Bash auto-approval: parser and hook ship with the plugin, projects own only their patterns; observed-history promotion"
     }
   ]
 }

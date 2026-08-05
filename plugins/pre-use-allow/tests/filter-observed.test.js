@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'filter-observed.js');
-const CORE_SRC = path.join(__dirname, '..', 'templates', 'approve-commands-core.js');
+const CORE_SRC = path.join(__dirname, '..', 'hooks', 'approve-commands-core.js');
 
 function makeProject({ withPatterns = true, withCore = true, withObserved = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fo-'));
@@ -139,14 +139,16 @@ check('missing patterns module → exit 1', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Case 6: missing core module → exit 1 with clear stderr.
+// Case 6: no vendored core → fall back to the plugin's own parser.
+// Since 0.6.0 the parser ships with the plugin, so a project without one is the
+// normal case, not an error. (Pre-0.6.0 a vendored copy was required.)
 // ---------------------------------------------------------------------------
-check('missing core module → exit 1', () => {
+check('no vendored core → uses the plugin parser', () => {
   const root = makeProject({ withCore: false });
   cleanups.push(root);
   const r = run(root);
-  assert.strictEqual(r.status, 1, 'missing core should exit 1');
-  assert.ok(/cannot load/.test(r.stderr), `expected "cannot load" in stderr, got: ${r.stderr}`);
+  assert.strictEqual(r.status, 0, `should succeed using the plugin parser, stderr: ${r.stderr}`);
+  assert.ok(!/cannot load/.test(r.stderr), `should not report a load failure, got: ${r.stderr}`);
 });
 
 // ---------------------------------------------------------------------------

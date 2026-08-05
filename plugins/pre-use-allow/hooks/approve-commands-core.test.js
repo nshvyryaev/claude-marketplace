@@ -3,7 +3,9 @@ const assert = require('assert');
 const path = require('path');
 
 const { parseAndSplit, isApproved } = require(path.join(__dirname, 'approve-commands-core.js'));
-const { segmentPatterns } = require(path.join(__dirname, 'approve-commands-patterns.js'));
+// The end-to-end verdict cases below run against the starter patterns a project gets from
+// templates/patterns.js — they pin the parser's behaviour, not any one project's allow-list.
+const { segmentPatterns } = require(path.join(__dirname, '..', 'templates', 'patterns.js'));
 
 let passed = 0, failed = 0;
 const fail = (label, msg) => { console.log(`  FAIL  ${label}: ${msg}`); failed++; };

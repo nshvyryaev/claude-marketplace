@@ -1,6 +1,9 @@
 {
   "name": "pre-use-allow",
-  "version": "0.5.0",
-  "description": "PreToolUse Bash auto-approval workflow with parser-based per-segment patterns and decision-aware observation log",
-  "author": { "name": "Nikita Shvyryaev", "email": "nikitagsh@gmail.com" }
+  "version": "0.6.0",
+  "description": "PreToolUse Bash auto-approval: parser and hook ship with the plugin, projects own only their patterns",
+  "author": {
+    "name": "Nikita Shvyryaev",
+    "email": "nikitagsh@gmail.com"
+  }
 }

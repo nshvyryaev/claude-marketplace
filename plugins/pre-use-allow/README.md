@@ -4,7 +4,7 @@ PreToolUse Bash auto-approval workflow with a parser-based check so per-command 
 
 Two parts:
 
-1. **Per-project hook** (`approve-commands.js` + `approve-commands-core.js`) — parses each Bash command into sequence segments (`&&`, `||`, `;`) and pipe components (`|`), rejects unsafe shell constructs (`$(...)`, backticks, redirects, heredocs, background, subshells), and requires every component to match a per-segment pattern from `approve-commands-patterns.js`. Patterns grow project by project.
+1. **Plugin-served hook** (`hooks/approve-commands.js` + `hooks/approve-commands-core.js`) — parses each Bash command into sequence segments (`&&`, `||`, `;`) and pipe components (`|`), rejects unsafe shell constructs (`$(...)`, backticks, redirects, heredocs, background, subshells), and requires every component to match a per-segment pattern supplied by the project. Patterns grow project by project.
 2. **Decision-aware observation** — a PostToolUse hook records each Bash command into `observed.jsonl` **only when it went through a user prompt** (i.e. the PreToolUse hook stayed neutral and the user manually approved). Auto-approved commands are skipped — they are already covered. PreToolUse appends a per-tool-call entry (keyed by `tool_use_id`) to `decisions.jsonl`; PostToolUse looks up its own entry there and decides whether to log. Keying by `tool_use_id` makes the mechanism race-free under long-running and interleaved tool calls. The `/pre-use-allow:pre-use-allow-run` slash command reads `observed.jsonl`, filters out already-covered commands (using the same parser the hook uses), and promotes the user-selected ones into the pattern list (with a fresh test case each).
 
 ## Why the parser
@@ -23,14 +23,32 @@ Earlier versions of this plugin asked each regex to handle both the shell struct
 /pre-use-allow:pre-use-allow-init
 ```
 
-Copies four files to `.claude/hooks/`:
+Creates `.claude/pre-use-allow/` with:
 
-- `approve-commands-core.js` — parser + decision (do not edit per-project)
-- `approve-commands.js` — hook entry point
-- `approve-commands-patterns.js` — `segmentPatterns: RegExp[]`, the project's whitelist
-- `approve-commands.test.js` — test suite
+- `patterns.js` — `segmentPatterns: RegExp[]`, the project's whitelist. **The only file a project owns.**
+- `patterns.test.js` — the project's allow/deny boundary tests
+- `.gitignore` — for the observation logs
 
-…and prints the `settings.json` snippet you need to merge.
+The parser and the PreToolUse entry point stay in the plugin and are registered through
+`hooks/hooks.json`; nothing to merge into `settings.json` for approval. You only add a `PostToolUse`
+entry if you want the observation log.
+
+### Where the patterns are read from
+
+1. `<project>/.claude/pre-use-allow/patterns.js` — canonical since 0.6.0
+2. `<project>/.claude/hooks/approve-commands-patterns.js` — pre-0.6.0 layout, still honoured
+
+A project with no patterns file gets no decision at all, which is the right default for a project
+that never opted in.
+
+### Upgrading from a pre-0.6.0 project
+
+Before 0.6.0 the entry point and parser were **copied into each project**. That meant parser fixes
+never reached repos that had already been initialised — one project was still auto-approving
+`<allowed command> && rm -rf <dir>` months after that hole was closed elsewhere. If
+`.claude/hooks/approve-commands.js` exists, the plugin hook **stands down** so nothing breaks;
+run `/pre-use-allow:pre-use-allow-init` to migrate, and note that a pre-0.4.0 `APPROVED_PATTERNS`
+export has to be rewritten per-segment by hand rather than renamed.
 
 ## Grow the patterns
 
