@@ -1,6 +1,6 @@
 {
   "name": "cocos-files-handler",
-  "version": "0.4.0",
-  "description": "Read/edit Cocos Creator .scene/.prefab files via safe Node scripts; blocks direct edits.",
+  "version": "0.5.0",
+  "description": "Read/edit Cocos Creator .scene/.prefab files via safe Node scripts; blocks direct edits; static checks for Cocos 3.x TypeScript traps tsc cannot catch.",
   "author": { "name": "Nikita Shvyryaev", "email": "nikitagsh@gmail.com" }
 }

@@ -1,7 +1,18 @@
 ---
 name: cocos-files-handler
-description: Working with Cocos Creator scenes and prefabs via Node.js scripts. Use when you need to inspect or modify prefab or scene.
+description: Working with Cocos Creator scenes, prefabs and gameplay TypeScript. Use when you need to inspect or modify a prefab or scene, or when writing Cocos Creator 3.x component code — cocos-pitfalls.md lists API traps the compiler does not catch.
 ---
+
+## Пишешь TypeScript для Cocos?
+
+Прочитай [cocos-pitfalls.md](cocos-pitfalls.md) — там API-ловушки Cocos Creator 3.x, которые
+**не ловит компилятор** и которые уже стоили времени на этих проектах. Проверить код руками:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/verify-cocos-code.js --all
+```
+
+PostToolUse-хук плагина гоняет ту же проверку автоматически после каждой записи `.ts`.
 
 ## Куда писать временные JSON
 
@@ -37,6 +48,7 @@ description: Working with Cocos Creator scenes and prefabs via Node.js scripts. 
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/create-prefab.js --file <prefab> --name <RootName> [--width w] [--height h] [--anchor-x ax] [--anchor-y ay] [--active true\|false] [--sprite-frame uuid@sub] [--sprite-color r,g,b,a] [--dry-run]` | Создаёт новый пустой .prefab файл с корневой нодой и UITransform (опционально — Sprite). |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/create-anim-clip.js --atlas-meta <plist.meta> --name-prefix <prefix> --out <path.anim> [--clip-name n] [--sample 60] [--speed 1] [--wrap-mode 2] [--force] [--dry-run]` | Создаёт `cc.AnimationClip` (.anim + .anim.meta) из спрайт-фреймов атласа `.plist.meta`, отфильтрованных по префиксу имени и отсортированных лексикографически. Выходной clip биндится на `cc.Sprite.spriteFrame`. `--force` разрешает перезапись существующего `.anim`/`.anim.meta` и переиспользует UUID из существующего `.anim.meta` (стабильные ссылки в prefab при регенерации). Полученный `.anim.meta` можно подключать в `cc.Animation._clips` через `@asset:...anim.meta` (auto-resolves в `cc.AnimationClip`). |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/add-animation-clip.js --file <prefab> --clip-uuid <uuid>` | Идемпотентно добавляет UUID `cc.AnimationClip` в `cc.Animation._clips` существующего префаба. Падает, если в префабе нет `cc.Animation` или их больше одного. Не трогает `_defaultClip`. |
+| `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/verify-cocos-code.js (--all \| --file <path.ts>) [--json]` | Статические проверки TypeScript для Cocos 3.x, которых нет у `tsc`: `node.setActive()`, импорт `.json`, правка сгенерённого `temp/tsconfig.cocos.json`. Exit 1 при находках. Подавление — `// cocos-verify-ignore` в конце строки. Тот же чекер висит PostToolUse-хуком. |
 | `node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/replace-label-font.js --file <scene/prefab> --font-meta <ttf.meta> [--mode system\|all] [--dry-run]` | Меняет шрифт у `cc.Label` в сцене/префабе. По умолчанию (`--mode system`) трогает только labels с `_isSystemFontUsed: true` (т.е. реально рендерящие системный Arial); ставит им `_font` на указанный TTF и `_isSystemFontUsed: false`. `--mode all` — переписать вообще все labels в файле. `_fontFamily` не трогается. Идемпотентен. |
 
 ## Полный рабочий цикл перевода новых строк

@@ -28,7 +28,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const ASSETS_DIR = path.join(__dirname, '..', 'assets');
+const ROOT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+const ASSETS_DIR = path.join(ROOT_DIR, 'assets');
 const SCENES_DIR = path.join(ASSETS_DIR, 'scenes');
 const PREFABS_DIR = path.join(ASSETS_DIR, 'prefabs');
 
@@ -122,7 +123,7 @@ function processFile(filePath) {
         const nodePath = nodeIdx >= 0 ? buildNodePath(objects, nodeIdx) : '(unknown)';
 
         results.push({
-            file: path.relative(path.join(__dirname, '..'), filePath).replace(/\\/g, '/'),
+            file: path.relative(ROOT_DIR, filePath).replace(/\\/g, '/'),
             labelObjectIndex: i,
             nodeName,
             nodePath,
@@ -155,8 +156,7 @@ let outputPath = null;
 if (outputArgIdx >= 0) {
     outputPath = path.resolve(process.argv[outputArgIdx + 1]);
 } else if (!useStdout) {
-    const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-    outputPath = path.join(projectRoot, 'tmp', 'patches.json');
+    outputPath = path.join(ROOT_DIR, 'tmp', 'patches.json');
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 }
 
@@ -164,7 +164,7 @@ const json = JSON.stringify(allResults, null, 2);
 
 if (outputPath) {
     fs.writeFileSync(outputPath, json, 'utf8');
-    console.log(`Written ${allResults.length} entries to ${path.relative(path.join(__dirname, '..'), outputPath)}`);
+    console.log(`Written ${allResults.length} entries to ${path.relative(ROOT_DIR, outputPath)}`);
 } else {
     process.stdout.write(json + '\n');
 }
