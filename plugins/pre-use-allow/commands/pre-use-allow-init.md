@@ -65,11 +65,19 @@ stale in each repo.
    {
      "hooks": {
        "PostToolUse": [
-         { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node .claude/hooks/observe-commands.js" }] }
+         { "matcher": "Bash", "hooks": [{ "type": "command", "command": "H=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/observe-commands.js\"; if [ -f \"$H\" ]; then exec node \"$H\"; fi" }] }
        ]
      }
    }
    ```
+
+   The path must go through `$CLAUDE_PROJECT_DIR` rather than a bare relative
+   `node .claude/hooks/observe-commands.js`. Hook commands are resolved against the session's
+   **current** working directory, which moves when the agent works inside a git worktree or an
+   additional working directory. `.claude/` is normally gitignored, so a worktree checkout has no
+   `.claude/hooks/` at all, and every single Bash call then fails the hook with a `MODULE_NOT_FOUND`
+   error. The `[ -f ]` guard makes the hook a silent no-op (exit 0) when the file really is absent
+   instead of spamming errors, and `exec` keeps the script's own exit code intact.
 
 7. **Run the project's test suite** to confirm the patterns are green:
 
