@@ -107,6 +107,8 @@ export async function runScenarios(scenarios, config, options = {}) {
         shotsDir: config.shotsDir,
         clickable: config.clickable,
         defaultTimeout: config.timeout ?? 5000,
+        baseUrl: config.url,
+        settleMs: config.settleMs ?? 1500,
         log,
       });
 

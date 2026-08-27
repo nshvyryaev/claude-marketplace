@@ -31,7 +31,7 @@ async function poll(check, { timeout, interval = 120 }) {
   }
 }
 
-export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log }) {
+export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log, baseUrl, settleMs = 1500 }) {
   const shots = [];
 
   const click = async (text, { index = 0, timeout = defaultTimeout } = {}) => {
@@ -116,8 +116,19 @@ export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log
     return file;
   };
 
+  // Переход внутри сценария: игра открывается с другими параметрами запуска —
+  // проверить откат площадки иначе нельзя.
+  const go = async (target) => {
+    const url = new URL(target, baseUrl).href;
+    await cdp.send('Page.navigate', { url });
+    await wait(settleMs);
+    cdp.clearErrors();
+    log?.(`  переход ${url}`);
+  };
+
   return {
     steps: {
+      go,
       click,
       keys: async (letters, options) => {
         for (const letter of letters) await click(letter, options);
