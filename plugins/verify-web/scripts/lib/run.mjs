@@ -24,18 +24,33 @@ async function freshPage(cdp, config, { dark }) {
     storageTypes: 'local_storage,indexeddb,cookies,cache_storage,service_workers',
   });
   await cdp.send('Emulation.setEmulatedMedia', {
-    features: [{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }],
+    features: [
+      { name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' },
+      // Анимации появления — вторая после шрифтов причина мигающих снимков:
+      // кадр ловится посреди перехода, и диф краснеет на неподвижной вёрстке.
+      // Просим приложение обойтись без движения его же средствами, а не
+      // подсовываем свой CSS: то, что не умеет reduced-motion, и снимать
+      // честнее в движении.
+      { name: 'prefers-reduced-motion', value: 'reduce' },
+    ],
   });
   await cdp.send('Page.navigate', { url: config.url });
   await wait(config.settleMs ?? 1500);
   cdp.clearErrors();
 }
 
-async function compareShots(scenario, shots, config, { updateBaseline }) {
+async function compareShots(scenario, shots, config, { updateBaseline, dark }) {
   const report = [];
 
   for (const shot of shots) {
-    const baselineFile = path.join(config.baselineDir, `${scenario.name}-${shot.name}.png`);
+    // Тёмная тема — свой набор эталонов. С общим именем прогон с --dark
+    // сравнивался бы со светлым снимком и всегда краснел, а
+    // --update-baseline --dark молча затёр бы светлые эталоны тёмными.
+    const suffix = dark ? '-dark' : '';
+    const baselineFile = path.join(
+      config.baselineDir,
+      `${scenario.name}-${shot.name}${suffix}.png`,
+    );
     const current = await readFile(shot.file);
 
     if (!existsSync(baselineFile)) {
@@ -67,7 +82,10 @@ async function compareShots(scenario, shots, config, { updateBaseline }) {
     }
 
     if (result.ratio > (config.snapshotTolerance ?? 0.002)) {
-      const diffFile = path.join(config.shotsDir, `${scenario.name}-${shot.name}.diff.png`);
+      const diffFile = path.join(
+        config.shotsDir,
+        `${scenario.name}-${shot.name}${suffix}.diff.png`,
+      );
       await writeFile(diffFile, result.image);
       report.push({
         ...shot,
@@ -129,7 +147,7 @@ export async function runScenarios(scenarios, config, options = {}) {
         failure = `ошибки на странице: ${pageErrors.map((e) => e.text).join(' | ')}`;
       }
 
-      const shotReport = await compareShots(scenario, shots, config, { updateBaseline });
+      const shotReport = await compareShots(scenario, shots, config, { updateBaseline, dark });
       const snapshotBroken = shotReport.filter((s) =>
         ['разошёлся', 'размер'].includes(s.baseline),
       );
