@@ -108,6 +108,10 @@ export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log
 
   const shot = async (name) => {
     await mkdir(shotsDir, { recursive: true });
+    // Шрифты — главный источник мигающих снимков: пока своя гарнитура едет,
+    // текст рисуется запасной, и диф краснеет на каждой букве, хотя вёрстка
+    // не менялась. Ждём готовности шрифтов, а не наращиваем допуск.
+    await cdp.evaluate('document.fonts.ready.then(() => true)');
     const captured = await cdp.send('Page.captureScreenshot', { format: 'png' });
     const file = path.join(shotsDir, `${name}.png`);
     await writeFile(file, Buffer.from(captured.data, 'base64'));
