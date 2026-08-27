@@ -9,6 +9,11 @@
   },
   "plugins": [
     {
+      "name": "acceptance",
+      "source": "./plugins/acceptance",
+      "description": "Acceptance criteria as a first-class artefact: lifecycle, a freeze hook that makes criteria unwritable during implementation, and rules for when the engineer must sign off"
+    },
+    {
       "name": "cocos-files-handler",
       "source": "./plugins/cocos-files-handler",
       "description": "Cocos Creator scenes/prefabs editor with guardrail hooks and a static checker for Cocos 3.x TypeScript traps"

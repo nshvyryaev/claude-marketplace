@@ -1,0 +1,9 @@
+{
+  "name": "acceptance",
+  "version": "0.1.0",
+  "description": "Acceptance criteria as a first-class artefact: lifecycle, a freeze hook that makes criteria unwritable during implementation, and rules for when the engineer must sign off",
+  "author": {
+    "name": "Nikita Shvyryaev",
+    "email": "nikitagsh@gmail.com"
+  }
+}
