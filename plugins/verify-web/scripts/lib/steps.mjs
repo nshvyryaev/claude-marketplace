@@ -44,6 +44,23 @@ export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log
         const el = hits[${index}];
         if (!el) return { ok: false, seen: nodes.map((n) => n.textContent.trim()).filter(Boolean) };
         if (el.disabled) return { ok: false, disabled: true };
+        // Полная последовательность указательных событий, а не голый click():
+        // обработчик, висящий на pointerdown/pointerup (удержание, свайп,
+        // перетаскивание), от el.click() не срабатывает вовсе, и сценарий
+        // молча идёт дальше по нетронутому экрану.
+        const options = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          button: 0,
+          pointerId: 1,
+          isPrimary: true,
+          pointerType: 'mouse',
+        };
+        el.dispatchEvent(new PointerEvent('pointerdown', options));
+        el.dispatchEvent(new MouseEvent('mousedown', options));
+        el.dispatchEvent(new PointerEvent('pointerup', options));
+        el.dispatchEvent(new MouseEvent('mouseup', options));
         el.click();
         return { ok: true };
       })()`;

@@ -51,9 +51,9 @@ export async function connect(port) {
     }
 
     if (message.id && pending.has(message.id)) {
-      const { resolve, reject } = pending.get(message.id);
+      const { resolve, reject, method: pendingMethod } = pending.get(message.id);
       pending.delete(message.id);
-      if (message.error) reject(new Error(`CDP ${message.error.message}`));
+      if (message.error) reject(new Error(`CDP ${pendingMethod}: ${message.error.message}`));
       else resolve(message.result);
     }
   };
@@ -61,7 +61,7 @@ export async function connect(port) {
   const send = (method, params = {}) =>
     new Promise((resolve, reject) => {
       const id = ++nextId;
-      pending.set(id, { resolve, reject });
+      pending.set(id, { resolve, reject, method });
       socket.send(JSON.stringify({ id, method, params }));
     });
 
@@ -72,6 +72,11 @@ export async function connect(port) {
   // Значение выражения возвращается по значению; исключение внутри страницы
   // поднимается как ошибка здесь, а не молча превращается в undefined.
   const evaluate = async (expression) => {
+    // Пустое выражение уходит в CDP как undefined и возвращается «Invalid
+    // parameters» — ошибкой, по которой невозможно понять, что сломалось.
+    if (typeof expression !== 'string' || expression.trim() === '') {
+      throw new Error('Пустое выражение для вычисления на странице');
+    }
     const result = await send('Runtime.evaluate', {
       expression,
       returnByValue: true,
