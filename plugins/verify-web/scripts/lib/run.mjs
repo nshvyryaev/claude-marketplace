@@ -13,7 +13,7 @@ import { diffPng } from './png.mjs';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function freshPage(cdp, config, { dark }) {
+async function freshPage(cdp, config, { dark, motion }) {
   // Хранилище чистится на пустой странице, а не на странице игры: живое
   // приложение успевает записать своё состояние обратно между чисткой и
   // перезагрузкой, и следующий сценарий стартует с чужого экрана.
@@ -31,7 +31,9 @@ async function freshPage(cdp, config, { dark }) {
       // Просим приложение обойтись без движения его же средствами, а не
       // подсовываем свой CSS: то, что не умеет reduced-motion, и снимать
       // честнее в движении.
-      { name: 'prefers-reduced-motion', value: 'reduce' },
+      // Сценарий, который проверяет саму анимацию, объявляет motion = true и
+      // получает движение обратно. Для всех остальных оно выключено.
+      { name: 'prefers-reduced-motion', value: motion ? 'no-preference' : 'reduce' },
     ],
   });
   await cdp.send('Page.navigate', { url: config.url });
@@ -43,6 +45,13 @@ async function compareShots(scenario, shots, config, { updateBaseline, dark }) {
   const report = [];
 
   for (const shot of shots) {
+    // Снимок-свидетельство: кадр посреди движения зависит от момента съёмки, и
+    // эталон из него сделал бы проверки мигающими. Такой кадр нужен глазам.
+    if (shot.baseline === false) {
+      report.push({ ...shot, baseline: 'без эталона — кадр для осмотра' });
+      continue;
+    }
+
     // Тёмная тема — свой набор эталонов. С общим именем прогон с --dark
     // сравнивался бы со светлым снимком и всегда краснел, а
     // --update-baseline --dark молча затёр бы светлые эталоны тёмными.
@@ -132,7 +141,7 @@ export async function runScenarios(scenarios, config, options = {}) {
 
       let failure = null;
       try {
-        await freshPage(cdp, config, { dark });
+        await freshPage(cdp, config, { dark, motion: scenario.motion === true });
         await scenario.run(steps);
       } catch (error) {
         failure =

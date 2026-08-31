@@ -106,7 +106,13 @@ export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log
     log?.(`  ${description} — верно`);
   };
 
-  const shot = async (name) => {
+  /**
+   * baseline: false — снимок-свидетельство, а не эталон. Кадр, снятый посреди
+   * движения, зависит от момента съёмки: записав его в эталоны, мы вернули бы
+   * мигающие проверки, от которых только что избавились. Такой кадр нужен
+   * глазам, а не пиксельному сравнению.
+   */
+  const shot = async (name, { baseline = true } = {}) => {
     await mkdir(shotsDir, { recursive: true });
     // Шрифты — главный источник мигающих снимков: пока своя гарнитура едет,
     // текст рисуется запасной, и диф краснеет на каждой букве, хотя вёрстка
@@ -115,7 +121,7 @@ export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log
     const captured = await cdp.send('Page.captureScreenshot', { format: 'png' });
     const file = path.join(shotsDir, `${name}.png`);
     await writeFile(file, Buffer.from(captured.data, 'base64'));
-    shots.push({ name, file });
+    shots.push({ name, file, baseline });
     log?.(`  снимок «${name}»`);
     return file;
   };

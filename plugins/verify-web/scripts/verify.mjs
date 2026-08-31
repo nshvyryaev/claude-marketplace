@@ -80,6 +80,7 @@ async function loadScenarios(dir) {
       zone: module.zone,
       title: module.title,
       allowErrors: module.allowErrors ?? false,
+      motion: module.motion === true,
       run: module.default,
     });
   }
