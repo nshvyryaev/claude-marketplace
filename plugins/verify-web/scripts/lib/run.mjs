@@ -13,7 +13,20 @@ import { diffPng } from './png.mjs';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Размер окна из настроек: с ним стартует каждый сценарий. */
+function metricsOf(config) {
+  return {
+    width: config.viewport?.width ?? 390,
+    height: config.viewport?.height ?? 844,
+    deviceScaleFactor: config.viewport?.scale ?? 2,
+    mobile: true,
+  };
+}
+
 async function freshPage(cdp, config, { dark, motion }) {
+  // Размер окна возвращается к настройкам: сценарий мог сменить его шагом
+  // viewport(), и следующий иначе стартовал бы на чужом экране.
+  await cdp.send('Emulation.setDeviceMetricsOverride', metricsOf(config));
   // Хранилище чистится на пустой странице, а не на странице игры: живое
   // приложение успевает записать своё состояние обратно между чисткой и
   // перезагрузкой, и следующий сценарий стартует с чужого экрана.
@@ -117,12 +130,7 @@ export async function runScenarios(scenarios, config, options = {}) {
 
   const chrome = await launchChrome(config.viewport);
   const cdp = await connect(chrome.port);
-  await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: config.viewport?.width ?? 390,
-    height: config.viewport?.height ?? 844,
-    deviceScaleFactor: config.viewport?.scale ?? 2,
-    mobile: true,
-  });
+  await cdp.send('Emulation.setDeviceMetricsOverride', metricsOf(config));
 
   const results = [];
 
@@ -136,6 +144,7 @@ export async function runScenarios(scenarios, config, options = {}) {
         defaultTimeout: config.timeout ?? 5000,
         baseUrl: config.url,
         settleMs: config.settleMs ?? 1500,
+        scale: config.viewport?.scale ?? 2,
         log,
       });
 

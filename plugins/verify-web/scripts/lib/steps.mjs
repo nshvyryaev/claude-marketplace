@@ -31,7 +31,10 @@ async function poll(check, { timeout, interval = 120 }) {
   }
 }
 
-export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log, baseUrl, settleMs = 1500 }) {
+export function makeSteps(
+  cdp,
+  { shotsDir, clickable, defaultTimeout = 5000, log, baseUrl, settleMs = 1500, scale = 2 },
+) {
   const shots = [];
 
   const click = async (text, { index = 0, timeout = defaultTimeout } = {}) => {
@@ -136,9 +139,30 @@ export function makeSteps(cdp, { shotsDir, clickable, defaultTimeout = 5000, log
     log?.(`  переход ${url}`);
   };
 
+  /**
+   * Сменить размер окна посреди сценария — вёрстку проверяют на нескольких
+   * экранах, не заводя по сценарию на каждый. Страница не перезагружается:
+   * состояние, до которого сценарий дошёл, остаётся. Следующий сценарий
+   * стартует снова с размера из настроек.
+   */
+  const viewport = async (width, height) => {
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width,
+      height,
+      deviceScaleFactor: scale,
+      mobile: true,
+    });
+    // Два кадра: перестроиться вёрстке и отработать наблюдателям размера.
+    await cdp.evaluate(
+      'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))',
+    );
+    log?.(`  окно ${width}×${height}`);
+  };
+
   return {
     steps: {
       go,
+      viewport,
       click,
       keys: async (letters, options) => {
         for (const letter of letters) await click(letter, options);
