@@ -84,3 +84,13 @@ test('миссия-фабрика без обязательного параме
   assert.throws(() => checkMissions([{ name: 'r', mission: { name: 'use', params: {} } }], { missions: { use } }), /r.*type/);
   assert.doesNotThrow(() => checkMissions([{ name: 'r', mission: { name: 'use', params: { type: 2 } } }], { missions: { use } }));
 });
+
+test('хэш адаптера меняется при правке модуля во вложенном каталоге', async () => {
+  const root = await project();
+  await mkdir(path.join(root, 'verify', 'bot', 'rules'), { recursive: true });
+  await writeFile(path.join(root, 'verify', 'bot', 'rules', 'a.mjs'), 'export const x = 1;');
+  const config = await loadConfig(root);
+  const before = await adapterHash(root, config);
+  await writeFile(path.join(root, 'verify', 'bot', 'rules', 'a.mjs'), 'export const x = 2;');
+  assert.notEqual(await adapterHash(root, config), before);
+});

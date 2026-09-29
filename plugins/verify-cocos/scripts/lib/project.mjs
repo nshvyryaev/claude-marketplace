@@ -46,7 +46,8 @@ export async function loadConfig(root, override) {
 
 export async function adapterHash(root, config) {
   const dir = path.resolve(root, config.bot);
-  const files = (await readdir(dir)).filter((f) => f.endsWith('.mjs')).sort();
+  // Рекурсивно: адаптер может раскладывать правила по подкаталогам.
+  const files = (await readdir(dir, { recursive: true })).map((f) => f.split(path.sep).join('/')).filter((f) => f.endsWith('.mjs') && !f.startsWith('tests/')).sort();
   const hash = createHash('sha1');
   for (const file of files) hash.update(file).update(await readFile(path.join(dir, file)));
   hash.update(await readFile(path.resolve(root, config.bridge)));
