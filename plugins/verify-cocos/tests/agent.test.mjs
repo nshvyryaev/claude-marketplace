@@ -234,3 +234,11 @@ test('цель получает кадры с начала цели и може�
   assert.ok(seen.includes(4), JSON.stringify(seen));
   assert.ok(trace.entries.some((e) => e.t === 'goal-end' && e.result === 'failed'));
 });
+
+test('проверка знает кадр предыдущего наблюдения: 0 — это стартовое состояние', async () => {
+  const seen = [];
+  const adapter = toyAdapter({ checks: [{ id: 'start', kind: 'invariant', level: 'fact', check: (p, c, ev, ctx) => { seen.push(ctx.prevFrame); return null; } }] });
+  await run({ adapter });
+  assert.equal(seen[0], 0);
+  assert.ok(seen[1] > 0);
+});

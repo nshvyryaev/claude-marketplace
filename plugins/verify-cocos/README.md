@@ -101,7 +101,7 @@ verify/
 
 ### Цель (что возвращает `candidates`)
 
-`{ kind, id, score, params, done(model, events, ctx), failed(model, events, ctx) }`, `ctx = { frame, goalFrames }` — цель может сдаться сама.
+`{ kind, id, score, params, done(model, events, ctx), failed(model, events, ctx) }`, `ctx = { frame, goalFrames }` — цель может сдаться сама. Проверки получают `ctx = { frame, prevFrame }`; `prevFrame === 0` — `prev` это стартовое состояние.
 Оценку считает проект; движок сравнивает числа. `kind` выбирает тактику.
 
 ## Проверки (`checks.mjs`)

@@ -49,6 +49,7 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
   // Разбор результата шага: события, наблюдение, ошибки консоли, проверки,
   // вырезки. Возвращает нарушение или null.
   const afterStep = async (stepped) => {
+    const prevFrame = frame;
     frame += stepped.frames;
     events = stepped.events;
     for (const event of events) trace.write({ f: frame, t: 'event', ...event });
@@ -63,7 +64,7 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
       trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
       return violation;
     }
-    const checked = guard(() => runner.observe(prev, model, events, { frame }), 'checks');
+    const checked = guard(() => runner.observe(prev, model, events, { frame, prevFrame }), 'checks');
     for (const entry of checked.log) trace.write({ f: frame, ...entry });
     let violation = checked.violation;
     for (const shot of checked.shots) {
