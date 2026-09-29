@@ -105,3 +105,42 @@ test('stall — только когда наблюдаемое состояни�
   const { result } = await run({ game: toyGame({ target: 50 }), adapter, limits: { stallFrames: 10, goalTimeoutFrames: 40, maxGoalFailures: 2 } });
   assert.equal(result.verdict, 'bot-stuck');
 });
+
+test('тактика без frames — bot-error, а не вечный цикл', async () => {
+  const adapter = toyAdapter({ tactics: { right: { next: () => ({ action: { dir: 1 } }) }, left: { next: () => ({ action: { dir: -1 }, frames: 1 }) } } });
+  const { result } = await run({ adapter });
+  assert.equal(result.verdict, 'bot-error');
+  assert.match(result.violation.message, /frames/);
+});
+
+test('тактика вернула не объект — bot-error', async () => {
+  const adapter = toyAdapter({ tactics: { right: { next: () => undefined }, left: { next: () => ({ action: { dir: -1 }, frames: 1 }) } } });
+  const { result } = await run({ adapter });
+  assert.equal(result.verdict, 'bot-error');
+});
+
+test('candidates вернул не массив — bot-error', async () => {
+  const { result } = await run({ adapter: toyAdapter({ candidates: () => null }) });
+  assert.equal(result.verdict, 'bot-error');
+});
+
+test('огромный шаг тактики урезается до лимитов, а не крутит игру вечно', async () => {
+  const adapter = toyAdapter({ candidates: () => [{ kind: 'idle', id: 'idle', score: 1, params: {}, done: () => false, failed: () => false }], tactics: { idle: { next: () => ({ action: { dir: 0 }, frames: Infinity }) } } });
+  const game = toyGame(); const steps = []; const step = game.step; game.step = (n) => { steps.push(n); return step(n); };
+  const { result } = await run({ game, adapter, limits: { maxFrames: 30, goalTimeoutFrames: 20, stallFrames: 1000 } });
+  assert.equal(result.verdict, 'timeout');
+  assert.ok(steps.every((n) => Number.isFinite(n) && n <= 20), `шаги: ${steps}`);
+});
+
+test('ошибка контракта ввода от моста (adapterFault) — bot-error', async () => {
+  const game = toyGame(); game.act = async () => { const e = new Error('Неизвестная клавиша в действии моста: KeyQ'); e.adapterFault = true; throw e; };
+  const { result } = await run({ game });
+  assert.equal(result.verdict, 'bot-error');
+});
+
+test('при случайных действиях таймауты целей не копят провалы бота', async () => {
+  const adapter = toyAdapter({ candidates: () => [{ kind: 'idle', id: 'idle', score: 1, params: {}, done: () => false, failed: () => false }] });
+  const game = toyGame(); game.actions = async () => [{ dir: 0 }];
+  const { result } = await run({ game, adapter, policy: 'random', limits: { goalTimeoutFrames: 5, maxGoalFailures: 2, maxFrames: 60, stallFrames: 1000 } });
+  assert.equal(result.verdict, 'timeout');
+});

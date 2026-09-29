@@ -27,3 +27,7 @@ test('dispatchOps шлёт события по порядку', async () => {
     [{ type: 'keyUp', key: 'ArrowLeft' }, { type: 'keyDown', key: 'ArrowUp' }]);
   assert.deepEqual(sent, [['Input.dispatchKeyEvent', 'keyUp', 'ArrowLeft'], ['Input.dispatchKeyEvent', 'keyDown', 'ArrowUp']]);
 });
+
+test('ошибка неизвестной клавиши помечена как ошибка адаптера', () => {
+  try { keyEvents({ type: 'keyDown', key: 'KeyQ' }); assert.fail('не бросило'); } catch (error) { assert.equal(error.adapterFault, true); }
+});

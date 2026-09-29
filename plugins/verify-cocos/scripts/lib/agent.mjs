@@ -32,6 +32,7 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
   let failures = 0;
   let goal = null;
   let goalStart = 0;
+  let tacticActs = 0;
   let events = [];
   let raw = null;
   let model = null;
@@ -61,7 +62,10 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
         else if (events.some((event) => adapter.replanOn.includes(event.type))) result = 'replan';
         if (result) {
           trace.write({ f: frame, t: 'goal-end', goal: goal.id, result, frames: frame - goalStart });
-          if (result === 'failed' || result === 'timeout') failures++;
+          // Провал цели — беда бота, только если тактика успела действовать.
+          // При случайных действиях цель не исполнялась, и копить провалы до
+          // bot-stuck значит обрывать исследование игры как неудачу бота.
+          if ((result === 'failed' || result === 'timeout') && tacticActs > 0) failures++;
           if (result === 'done') failures = 0;
           goal = null;
         }
@@ -69,7 +73,11 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
       if (failures >= limits.maxGoalFailures) return end('bot-stuck');
 
       if (!goal) {
-        const candidates = guard(() => adapter.candidates(model, mission), 'candidates');
+        const candidates = guard(() => {
+          const list = adapter.candidates(model, mission);
+          if (!Array.isArray(list)) throw new Error(`ожидался массив целей, получено ${JSON.stringify(list)}`);
+          return list;
+        }, 'candidates');
         if (candidates.length > 0) {
           const by = policy.goal() === 'random' ? 'random' : 'score';
           let chosen = candidates[0];
@@ -77,6 +85,7 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
           else for (const candidate of candidates) if (candidate.score > chosen.score) chosen = candidate;
           goal = { ...chosen, memo: {} };
           goalStart = frame;
+          tacticActs = 0;
           goals++;
           const top = [...candidates].sort((a, b) => b.score - a.score).slice(0, TOP_CANDIDATES);
           trace.write({
@@ -93,17 +102,39 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
       let frames = 1;
       let by;
       if (goal && policy.action() !== 'random') {
-        ({ action, frames } = guard(() => adapter.tactics[goal.kind].next(model, goal), `tactics.${goal.kind}`));
+        ({ action, frames } = guard(() => {
+          const step = adapter.tactics[goal.kind].next(model, goal);
+          // NaN или отсутствующий frames прокрутил бы ноль кадров, и ни один
+          // лимит не сработал бы — вечный цикл вместо вердикта.
+          if (!step || typeof step !== 'object' || !(step.frames >= 1)) {
+            throw new Error(`ожидалось { action, frames >= 1 }, получено ${JSON.stringify(step)}`);
+          }
+          return step;
+        }, `tactics.${goal.kind}`));
         by = 'tactic';
+        tacticActs++;
       } else {
         const actions = await game.actions();
         action = actions.length > 0 ? actions[pickIndex(rng, actions.length)] : null;
         frames = 1 + pickIndex(rng, limits.randomActionFrames);
         by = goal ? 'random' : 'no-goal';
       }
-      frames = Math.max(1, Math.floor(frames));
+      // Шаг не длиннее ближайшего лимита: огромный шаг тактики иначе крутил
+      // бы игру внутри одного вызова страницы, а --until проскакивал бы кадр.
+      const room = Math.min(
+        limits.maxFrames - frame,
+        goal ? limits.goalTimeoutFrames - (frame - goalStart) : Infinity,
+        limits.stopAt != null ? limits.stopAt - frame : Infinity,
+      );
+      frames = Math.max(1, Math.floor(Math.min(frames, room)));
 
-      await game.act(action);
+      try {
+        await game.act(action);
+      } catch (error) {
+        // Мост вернул ввод, который нельзя исполнить, — ошибка адаптера.
+        if (error.adapterFault) throw new AdapterError(`act: ${error.message}`);
+        throw error;
+      }
       trace.write({ f: frame, t: 'act', goal: goal?.id ?? null, action, frames, by });
       const stepped = await game.step(frames);
       frame += stepped.frames;

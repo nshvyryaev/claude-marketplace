@@ -10,17 +10,24 @@ export const KEYS = {
   Escape: { key: 'Escape', code: 'Escape', keyCode: 27 },
 };
 
+// Неисполнимый ввод — ошибка моста проекта, а не игры: агент даёт bot-error.
+function adapterFault(message) {
+  const error = new Error(message);
+  error.adapterFault = true;
+  return error;
+}
+
 const params = (type, { key, code, keyCode }) => ({
   type, key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode,
 });
 
 export function keyEvents(op) {
   const key = KEYS[op?.key];
-  if (!key) throw new Error(`Неизвестная клавиша в действии моста: ${op?.key}`);
+  if (!key) throw adapterFault(`Неизвестная клавиша в действии моста: ${op?.key}`);
   if (op.type === 'keyDown') return [params('keyDown', key)];
   if (op.type === 'keyUp') return [params('keyUp', key)];
   if (op.type === 'press') return [params('keyDown', key), params('keyUp', key)];
-  throw new Error(`Неизвестный тип ввода в действии моста: ${op.type}`);
+  throw adapterFault(`Неизвестный тип ввода в действии моста: ${op.type}`);
 }
 
 export async function dispatchOps(cdp, ops) {
