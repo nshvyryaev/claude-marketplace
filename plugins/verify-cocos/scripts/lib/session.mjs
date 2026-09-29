@@ -124,6 +124,9 @@ export async function openSession({ root, config, seed, run = {} }) {
     actions: () => call('window.__bot.actions()'),
     async act(action) {
       const ops = (await call(`window.__bot.act(${json(action)})`)) ?? [];
+      // Фокус может уйти с канваса посреди прогона (узлы HUD, оверлеи) — без
+      // него клавиши не доходят до cc.input, и бот молча стоит на месте.
+      if (ops.length > 0) await call(`document.getElementById('GameCanvas')?.focus(); true`, 'focus');
       await dispatchOps(cdp, ops);
       return ops;
     },

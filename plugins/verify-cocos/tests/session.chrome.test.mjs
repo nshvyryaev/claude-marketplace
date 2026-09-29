@@ -91,3 +91,13 @@ test('параметры прогона видны в странице, выре
     await assert.rejects(game.shot({ x: 400, y: 10, w: 10, h: 10 }), (e) => e.adapterFault === true);
   } finally { await game.close(); }
 });
+
+test('потерянный фокус канваса возвращается перед вводом', { skip: !hasChrome }, async () => {
+  const game = await openSession({ root, config: config('blur-bridge.js'), seed: 1 });
+  try {
+    await game.start({});
+    await game.act({ type: 'move', dir: 'right' });
+    await game.step(3);
+    assert.equal((await game.observe()).x, 3);
+  } finally { await game.close(); }
+});
