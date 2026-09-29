@@ -22,9 +22,12 @@ export const DEFAULTS = {
   policy: 'planned',
   soak: { seeds: 20, mission: 'capture-80', policies: ['planned', 'every:2', 'burst:30/10', 'random'] },
   zones: {},
+  theme: null,
+  pixel: { threshold: 12, tolerance: 0.002 },
+  baseline: 'verify/baseline',
 };
 
-const MODULES = ['model', 'missions', 'goals', 'tactics', 'oracles'];
+const MODULES = ['model', 'missions', 'goals', 'tactics', 'checks'];
 
 export async function loadConfig(root, override) {
   const file = override ? path.resolve(override) : path.join(root, 'verify', 'cocos.json');
@@ -37,6 +40,7 @@ export async function loadConfig(root, override) {
     start: { ...DEFAULTS.start, ...user.start },
     limits: { ...DEFAULTS.limits, ...user.limits },
     soak: { ...DEFAULTS.soak, ...user.soak },
+    pixel: { ...DEFAULTS.pixel, ...user.pixel },
   };
 }
 
@@ -56,7 +60,7 @@ export async function loadAdapter(root, config) {
     if (!existsSync(file)) throw new Error(`Нет модуля адаптера ${file}`);
     return import(pathToFileURL(file).href);
   };
-  const [model, missions, goals, tactics, oracles] = await Promise.all(MODULES.map(load));
+  const [model, missions, goals, tactics, checks] = await Promise.all(MODULES.map(load));
   const adapter = {
     toModel: model.toModel,
     progress: model.progress,
@@ -65,7 +69,7 @@ export async function loadAdapter(root, config) {
     candidates: goals.candidates,
     replanOn: goals.replanOn ?? [],
     tactics: tactics.tactics,
-    oracles: oracles.oracles ?? [],
+    checks: checks.checks ?? [],
   };
   for (const key of ['toModel', 'progress', 'missions', 'candidates', 'tactics']) {
     if (!adapter[key]) throw new Error(`Адаптер не экспортирует ${key} (см. README verify-cocos)`);
@@ -88,15 +92,25 @@ export async function loadRuns(root, config) {
     for (const part of parts) {
       try { parsePattern(part ?? 'planned'); } catch (error) { throw new Error(`Прогон ${file}: ${error.message}`); }
     }
-    runs.push({ name: file.replace(/[.]json$/, ''), ...run, policy });
+    const mission = typeof run.mission === 'string'
+      ? { name: run.mission, params: {} }
+      : (({ name, ...params }) => ({ name, params }))(run.mission);
+    runs.push({ name: file.replace(/[.]json$/, ''), ...run, policy, mission, theme: run.theme ?? config.theme, requires: run.requires ?? [] });
   }
   return runs;
 }
 
 export function checkMissions(runs, adapter) {
-  const bad = runs.filter((run) => !adapter.missions[run.mission]);
-  if (bad.length > 0) {
-    throw new Error(`Нет миссий: ${bad.map((r) => `${r.name} → ${r.mission}`).join(', ')}; есть: ${Object.keys(adapter.missions).join(', ')}`);
+  const problems = [];
+  for (const run of runs) {
+    const def = adapter.missions[run.mission.name];
+    if (!def) { problems.push(`${run.name} → ${run.mission.name}`); continue; }
+    // Миссия-фабрика объявляет обязательные параметры свойством required.
+    const missing = (def.required ?? []).filter((key) => run.mission.params[key] === undefined);
+    if (missing.length > 0) problems.push(`${run.name} → ${run.mission.name}: нет параметров ${missing.join(', ')}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(`Миссии: ${problems.join('; ')}; есть: ${Object.keys(adapter.missions).join(', ')}`);
   }
 }
 

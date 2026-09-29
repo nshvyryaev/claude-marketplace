@@ -75,3 +75,28 @@ test('строка start не мешает сравнению журналов: 
   const b = ['{"t":"start","adapter":"a2"}', 'x', 'z'];
   assert.deepEqual(compareTraces(a.slice(1), b.slice(1)), { line: 2, expected: 'y', actual: 'z' });
 });
+
+import { runOk, formatCoverage } from '../scripts/lib/report.mjs';
+
+test('зелёный — только вердикт по expect, требования подтверждены и нечего осматривать', () => {
+  const base = { verdict: 'pass', frame: 10, unmet: [], needsReview: 0 };
+  assert.equal(runOk(base, { verdict: 'pass' }), true);
+  assert.equal(runOk({ ...base, unmet: ['x'] }, { verdict: 'pass' }), false);
+  assert.equal(runOk({ ...base, needsReview: 1 }, { verdict: 'pass' }), false);
+});
+
+test('покрытие печатает ожидания, требования и осмотр', () => {
+  const lines = formatCoverage({
+    coverage: [
+      { id: 'a', kind: 'expectation', level: 'fact', armed: 2, confirmed: 2, missed: 0, unfinished: 0, pendingReview: 0 },
+      { id: 'b', kind: 'expectation', level: 'pixel', armed: 1, confirmed: 0, missed: 0, unfinished: 0, pendingReview: 1 },
+      { id: 'inv', kind: 'invariant', level: 'fact', steps: 30 },
+    ],
+    unmet: ['c'], needsReview: 1, review: [{ id: 'g', n: 1, file: 'review/g-1.png' }], dir: 'tmp/bot/r',
+  });
+  const text = lines.join(String.fromCharCode(10));
+  assert.ok(text.includes('a 2/2'), text);
+  assert.ok(text.includes('b 0/1') && text.includes('pixel'), text);
+  assert.match(text, /не проверено: c/);
+  assert.match(text, /на осмотр/);
+});
