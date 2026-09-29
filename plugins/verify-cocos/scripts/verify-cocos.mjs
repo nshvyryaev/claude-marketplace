@@ -14,15 +14,15 @@
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { loadConfig, loadAdapter, loadRuns } from './lib/project.mjs';
-import { executeRun } from './lib/execute.mjs';
+import { loadConfig, loadAdapter, loadRuns, checkMissions } from './lib/project.mjs';
+import { executeRun, runEnv } from './lib/execute.mjs';
 import { openSession } from './lib/session.mjs';
 import { readTraceLines } from './lib/trace.mjs';
 import { parsePattern, policySlug } from './lib/policy.mjs';
 import { zonesForFiles, selectScenarios } from './vendor/cdp/zones.mjs';
 import {
   expectMatches, formatRunLine, summarizeSoak, formatSoakSummary,
-  exitCodeRun, exitCodeSoak, compareTraces,
+  exitCodeRun, exitCodeSoak, compareTraces, startDifferences,
 } from './lib/report.mjs';
 
 function parseArgs(argv) {
@@ -71,6 +71,7 @@ async function commandRun() {
   if (selected.length === 0) { log(`Нечего прогонять (${reason}).`); return 0; }
 
   const { adapter, hash } = await loadAdapter(root, config);
+  checkMissions(selected, adapter);
   log(`Прогонов: ${selected.length} (${reason}), адаптер ${hash}`);
   const results = [];
   for (const spec of selected) {
@@ -90,6 +91,7 @@ async function commandSoak() {
   // Опечатка в паттерне должна всплыть до запуска десятков Chrome.
   for (const policy of policies) parsePattern(policy);
   const { adapter, hash } = await loadAdapter(root, config);
+  checkMissions([{ name: 'soak', mission: config.soak.mission }], adapter);
   const batch = path.join(outRoot, `soak-${stamp()}`);
   log(`Soak: ${seeds} seed × ${policies.length} политик, адаптер ${hash}`);
   const results = [];
@@ -114,8 +116,10 @@ async function commandReplay() {
   const start = JSON.parse(original[0]);
   if (start.t !== 'start') throw new Error(`Первая строка журнала — не start: ${original[0]}`);
   const { adapter, hash } = await loadAdapter(root, config);
-  if (hash !== start.adapter) {
-    log(`ВНИМАНИЕ: адаптер изменился (${start.adapter} → ${hash}). Расхождение журналов ожидаемо и не говорит о недетерминизме игры.`);
+  const changed = startDifferences(start, { adapter: hash, env: await runEnv(root, config) });
+  if (changed.length > 0) {
+    // Предупреждение — в stderr: с --json оно не должно теряться.
+    console.error(`ВНИМАНИЕ: с исходного прогона изменилось: ${changed.join(', ')}. Расхождение журналов ожидаемо и не говорит о недетерминизме игры.`);
   }
   const stopAt = args.values.until != null ? Number(args.values.until) : null;
   const outDir = path.join(dir, `replay-${stamp()}`);
@@ -123,9 +127,11 @@ async function commandReplay() {
   const result = await executeRun({ root, config, adapter, hash, spec, outDir, stopAt });
   log(formatRunLine(result));
   const replayed = await readTraceLines(path.join(outDir, 'trace.jsonl'));
-  const diff = compareTraces(original, replayed, { prefix: stopAt != null });
+  // Строка start сравнивается отдельно (выше): отличие в ней — окружение, а
+  // не ход прогона, и оно не должно прятать настоящую точку расхождения.
+  const diff = compareTraces(original.slice(1), replayed.slice(1), { prefix: stopAt != null });
   if (!diff) { log('Журнал воспроизведён без расхождений.'); return 0; }
-  log(`Расхождение на строке ${diff.line}:\n  было:  ${diff.expected}\n  стало: ${diff.actual}`);
+  log(`Расхождение на строке ${diff.line + 1}:\n  было:  ${diff.expected}\n  стало: ${diff.actual}`);
   return 1;
 }
 

@@ -92,3 +92,25 @@ export async function loadRuns(root, config) {
   }
   return runs;
 }
+
+export function checkMissions(runs, adapter) {
+  const bad = runs.filter((run) => !adapter.missions[run.mission]);
+  if (bad.length > 0) {
+    throw new Error(`Нет миссий: ${bad.map((r) => `${r.name} → ${r.mission}`).join(', ')}; есть: ${Object.keys(adapter.missions).join(', ')}`);
+  }
+}
+
+// Отпечаток сборки: пересборка меняет ход прогона так же, как правка адаптера.
+export async function buildFingerprint(root, config) {
+  const dir = path.resolve(root, config.build);
+  const hash = createHash('sha1');
+  const files = [path.join(dir, 'index.html')];
+  const src = path.join(dir, 'src');
+  if (existsSync(src)) {
+    for (const file of (await readdir(src)).filter((f) => /^settings.*\.json$/.test(f)).sort()) files.push(path.join(src, file));
+  }
+  for (const file of files) {
+    if (existsSync(file)) hash.update(path.basename(file)).update(await readFile(file));
+  }
+  return hash.digest('hex').slice(0, 12);
+}

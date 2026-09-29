@@ -53,3 +53,25 @@ test('строка отчёта содержит вердикт, имя, нар�
   const line = formatRunLine({ ok: false, name: 'r1', verdict: 'bug', frame: 10, goals: 2, summary: 'захват 12%', violation: { id: 'x', message: 'плохо' }, dir: 'tmp/bot/r1' });
   assert.match(line, /bug/); assert.match(line, /r1/); assert.match(line, /x: плохо/); assert.match(line, /tmp\/bot\/r1/);
 });
+
+import { safeSummary, startDifferences } from '../scripts/lib/report.mjs';
+
+test('упавший summary адаптера не роняет отчёт', () => {
+  assert.equal(safeSummary({ summary: () => 'ок' }, {}), 'ок');
+  assert.match(safeSummary({ summary: () => { throw new Error('опечатка'); } }, {}), /summary упал: опечатка/);
+  assert.equal(safeSummary({}, {}), '');
+  assert.equal(safeSummary({ summary: () => 'x' }, null), '');
+});
+
+test('replay называет всё, что изменилось с исходного прогона, кроме самого прогона', () => {
+  const was = { t: 'start', seed: 1, adapter: 'a1', env: { plugin: '0.1.0', build: 'b1', fps: 60, limits: { maxFrames: 10 } } };
+  assert.deepEqual(startDifferences(was, was), []);
+  const now = { ...was, adapter: 'a2', env: { ...was.env, build: 'b2', limits: { maxFrames: 20 } } };
+  assert.deepEqual(startDifferences(was, now).sort(), ['adapter', 'env.build', 'env.limits']);
+});
+
+test('строка start не мешает сравнению журналов: расхождение ищется с тела', () => {
+  const a = ['{"t":"start","adapter":"a1"}', 'x', 'y'];
+  const b = ['{"t":"start","adapter":"a2"}', 'x', 'z'];
+  assert.deepEqual(compareTraces(a.slice(1), b.slice(1)), { line: 2, expected: 'y', actual: 'z' });
+});

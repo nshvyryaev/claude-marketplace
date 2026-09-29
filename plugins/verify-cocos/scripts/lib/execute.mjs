@@ -1,18 +1,31 @@
 // Один прогон целиком: сессия, старт уровня, агент, снимки, журнал.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openSession } from './session.mjs';
 import { runAgent } from './agent.mjs';
 import { createTrace, saveTrace } from './trace.mjs';
 import { createPolicy } from './policy.mjs';
 import { mulberry32, botSeed } from './rng.mjs';
+import { buildFingerprint } from './project.mjs';
+import { safeSummary } from './report.mjs';
+
+const PLUGIN_JSON = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude-plugin', 'plugin.json');
+
+// Всё, кроме seed/уровня/миссии/политики и адаптера, что меняет ход прогона.
+// Пишется в строку start, чтобы replay отличал недетерминизм игры от
+// изменившегося окружения.
+export async function runEnv(root, config) {
+  const { version } = JSON.parse(await readFile(PLUGIN_JSON, 'utf8'));
+  return { plugin: version, build: await buildFingerprint(root, config), fps: config.fps, limits: config.limits };
+}
 
 export async function executeRun({ root, config, adapter, hash, spec, outDir, stopAt = null }) {
   await mkdir(outDir, { recursive: true });
   const trace = createTrace();
   trace.write({
     f: 0, t: 'start', name: spec.name, seed: spec.seed, level: spec.level,
-    mission: spec.mission, policy: spec.policy, adapter: hash,
+    mission: spec.mission, policy: spec.policy, adapter: hash, env: await runEnv(root, config),
   });
 
   let game = null;
@@ -43,7 +56,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     frame: result.frame,
     goals: result.goals,
     violation: result.violation,
-    summary: result.lastModel && adapter.summary ? adapter.summary(result.lastModel) : '',
+    summary: safeSummary(adapter, result.lastModel),
     dir: path.relative(root, outDir).split(path.sep).join('/'),
   };
 }

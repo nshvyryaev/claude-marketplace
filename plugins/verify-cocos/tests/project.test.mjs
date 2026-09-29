@@ -48,3 +48,21 @@ test('хэш адаптера меняется при правке модуля'
   await writeFile(path.join(root, 'verify', 'bot', 'model.mjs'), 'export const a = 2;');
   assert.notEqual(await adapterHash(root, config), before);
 });
+
+import { checkMissions, buildFingerprint } from '../scripts/lib/project.mjs';
+
+test('прогон с несуществующей миссией отклоняется до запуска', () => {
+  const adapter = { missions: { 'capture-80': {} } };
+  assert.doesNotThrow(() => checkMissions([{ name: 'a', mission: 'capture-80' }], adapter));
+  assert.throws(() => checkMissions([{ name: 'b', mission: 'capture-90' }], adapter), /b.*capture-90.*capture-80/);
+});
+
+test('отпечаток сборки меняется при пересборке', async () => {
+  const root = await project();
+  await mkdir(path.join(root, 'b', 'src'), { recursive: true });
+  await writeFile(path.join(root, 'b', 'index.html'), '<p>1</p>');
+  const config = await loadConfig(root);
+  const before = await buildFingerprint(root, config);
+  await writeFile(path.join(root, 'b', 'index.html'), '<p>2</p>');
+  assert.notEqual(await buildFingerprint(root, config), before);
+});

@@ -61,3 +61,25 @@ export function compareTraces(expected, actual, { prefix = false } = {}) {
   }
   return null;
 }
+
+// summary — код проекта; его ошибка не должна ронять отчёт и терять
+// накопленные результаты soak.
+export function safeSummary(adapter, model) {
+  if (!model || !adapter.summary) return '';
+  try {
+    return adapter.summary(model);
+  } catch (error) {
+    return `summary упал: ${error.message}`;
+  }
+}
+
+// Что изменилось между строкой start исходного прогона и текущим окружением.
+// Любое отличие делает расхождение replay ожидаемым, а не находкой.
+export function startDifferences(was, now) {
+  const diffs = [];
+  if (was.adapter !== now.adapter) diffs.push('adapter');
+  for (const key of ['plugin', 'build', 'fps', 'limits']) {
+    if (JSON.stringify(was.env?.[key]) !== JSON.stringify(now.env?.[key])) diffs.push(`env.${key}`);
+  }
+  return diffs;
+}
