@@ -1,8 +1,18 @@
 {
   "name": "nshvyryaev-claude-marketplace",
-  "owner": { "name": "Nikita Shvyryaev", "email": "nikitagsh@gmail.com" },
-  "metadata": { "description": "Personal Claude Code plugins" },
+  "owner": {
+    "name": "Nikita Shvyryaev",
+    "email": "nikitagsh@gmail.com"
+  },
+  "metadata": {
+    "description": "Personal Claude Code plugins"
+  },
   "plugins": [
+    {
+      "name": "acceptance",
+      "source": "./plugins/acceptance",
+      "description": "Acceptance criteria as a first-class artefact: lifecycle, a freeze hook that makes criteria unwritable during implementation, and rules for when the engineer must sign off"
+    },
     {
       "name": "cocos-files-handler",
       "source": "./plugins/cocos-files-handler",
@@ -12,6 +22,16 @@
       "name": "pre-use-allow",
       "source": "./plugins/pre-use-allow",
       "description": "PreToolUse Bash auto-approval: parser and hook ship with the plugin, projects own only their patterns; observed-history promotion"
+    },
+    {
+      "name": "verify-web",
+      "source": "./plugins/verify-web",
+      "description": "Browser verification engine over raw CDP: scenario runs, snapshot regression diffs and screenshots for visual judgement"
+    },
+    {
+      "name": "verify-cocos",
+      "source": "./plugins/verify-cocos",
+      "description": "Game-playing QA bot for Cocos Creator web builds: deterministic runs by seed, goal/tactic agent with configurable randomness, oracles, decision trace and replay"
     }
   ]
 }

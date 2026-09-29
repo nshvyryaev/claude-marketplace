@@ -1,0 +1,12 @@
+<!doctype html>
+<html><body><canvas id="GameCanvas" tabindex="99" width="64" height="64"></canvas><script>
+  // Игрушка: x растёт, пока зажата стрелка вправо; target — из Math.random.
+  // Клавиши слушает канвас, как Cocos: без фокуса на нём ввод не доходит.
+  const toy = { x: 0, dir: null, frame: 0, t: 0, target: Math.floor(Math.random() * 1000) };
+  const canvas = document.getElementById('GameCanvas');
+  canvas.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') toy.dir = 'right'; });
+  canvas.addEventListener('keyup', (e) => { if (e.key === 'ArrowRight') toy.dir = null; });
+  const loop = (t) => { toy.frame++; toy.t = t; if (toy.dir === 'right') toy.x++; requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+  window.toy = toy;
+</script></body></html>

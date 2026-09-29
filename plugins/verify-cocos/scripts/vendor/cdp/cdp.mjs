@@ -1,0 +1,125 @@
+// Тонкий клиент CDP поверх WebSocket: вызовы с ответом и сбор ошибок страницы.
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function findPageTarget(port, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+      const page = list.find((target) => target.type === 'page');
+      if (page) return page;
+    } catch {}
+    await wait(150);
+  }
+  throw new Error('Страница не найдена среди целей CDP');
+}
+
+export async function connect(port) {
+  const target = await findPageTarget(port);
+  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve;
+    socket.onerror = () => reject(new Error('WebSocket к Chrome не открылся'));
+  });
+
+  let nextId = 0;
+  const pending = new Map();
+  // Ошибки страницы копятся весь прогон: сценарий проверяет их в конце, а не
+  // после каждого шага — иначе асинхронная ошибка проскочит между шагами.
+  const errors = [];
+
+  // Закрытый сокет или упавшая страница отклоняют все ожидающие вызовы:
+  // иначе промис ждал бы ответа, который уже не придёт, и прогон висел бы.
+  let closedReason = null;
+  const failAll = (reason) => {
+    closedReason ??= reason;
+    for (const { reject, method } of pending.values()) reject(new Error(`CDP ${method}: ${reason}`));
+    pending.clear();
+  };
+  socket.onclose = () => failAll('соединение с Chrome закрыто');
+
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+
+    if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
+      errors.push({
+        kind: 'console',
+        text: message.params.args
+          .map((arg) => arg.value ?? arg.description ?? arg.type)
+          .join(' '),
+      });
+    }
+    if (message.method === 'Runtime.exceptionThrown') {
+      const details = message.params.exceptionDetails;
+      errors.push({
+        kind: 'exception',
+        text: details.exception?.description ?? details.text,
+      });
+    }
+    if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') {
+      errors.push({ kind: 'log', text: message.params.entry.text });
+    }
+
+    if (message.method === 'Inspector.targetCrashed') {
+      errors.push({ kind: 'crash', text: 'страница упала (Inspector.targetCrashed)' });
+      failAll('страница упала');
+    }
+
+    if (message.id && pending.has(message.id)) {
+      const { resolve, reject, method: pendingMethod } = pending.get(message.id);
+      pending.delete(message.id);
+      if (message.error) reject(new Error(`CDP ${pendingMethod}: ${message.error.message}`));
+      else resolve(message.result);
+    }
+  };
+
+  const send = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      if (closedReason) {
+        reject(new Error(`CDP ${method}: ${closedReason}`));
+        return;
+      }
+      const id = ++nextId;
+      pending.set(id, { resolve, reject, method });
+      socket.send(JSON.stringify({ id, method, params }));
+    });
+
+  await send('Page.enable');
+  await send('Runtime.enable');
+  await send('Log.enable');
+  await send('Inspector.enable');
+
+  // Значение выражения возвращается по значению; исключение внутри страницы
+  // поднимается как ошибка здесь, а не молча превращается в undefined.
+  const evaluate = async (expression) => {
+    // Пустое выражение уходит в CDP как undefined и возвращается «Invalid
+    // parameters» — ошибкой, по которой невозможно понять, что сломалось.
+    if (typeof expression !== 'string' || expression.trim() === '') {
+      throw new Error('Пустое выражение для вычисления на странице');
+    }
+    const result = await send('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    if (result.exceptionDetails) {
+      throw new Error(
+        `Ошибка в выражении на странице: ${
+          result.exceptionDetails.exception?.description ?? result.exceptionDetails.text
+        }`,
+      );
+    }
+    return result.result?.value;
+  };
+
+  return {
+    send,
+    evaluate,
+    errors,
+    clearErrors: () => errors.splice(0, errors.length),
+    close: () => {
+      failAll('соединение с Chrome закрыто');
+      socket.close();
+    },
+  };
+}

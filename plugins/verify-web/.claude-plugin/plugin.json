@@ -1,0 +1,9 @@
+{
+  "name": "verify-web",
+  "version": "0.1.0",
+  "description": "Browser verification engine over raw CDP: scenario runs, snapshot regression diffs and screenshots for visual judgement",
+  "author": {
+    "name": "Nikita Shvyryaev",
+    "email": "nikitagsh@gmail.com"
+  }
+}
