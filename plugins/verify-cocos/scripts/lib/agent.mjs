@@ -165,7 +165,15 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
       for (const entry of checked.log) trace.write({ f: frame, ...entry });
       let violation = checked.violation;
       for (const shot of checked.shots) {
-        const { outcome, violation: shotViolation } = await onShot({ ...shot, frame });
+        let shotResult;
+        try {
+          shotResult = await onShot({ ...shot, frame });
+        } catch (error) {
+          // Вырезка, которую нельзя снять, — ошибка проверки проекта.
+          if (error.adapterFault) throw new AdapterError(`${shot.id}: ${error.message}`);
+          throw error;
+        }
+        const { outcome, violation: shotViolation } = shotResult;
         runner.resolveShot(shot.id, outcome);
         trace.write({ f: frame, t: 'shot', check: shot.id, n: shot.n, outcome });
         violation ??= shotViolation ?? null;

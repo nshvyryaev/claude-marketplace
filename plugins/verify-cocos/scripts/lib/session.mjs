@@ -11,6 +11,7 @@ import { launchChrome } from '../vendor/cdp/chrome.mjs';
 import { connect } from '../vendor/cdp/cdp.mjs';
 import { serveDir } from './serve.mjs';
 import { shimSource } from './shim.mjs';
+import { viewSource } from './view.mjs';
 import { dispatchOps } from './keys.mjs';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -46,7 +47,7 @@ export function normalizeOrigin(text, url) {
   return String(text).split(url).join('/');
 }
 
-export async function openSession({ root, config, seed }) {
+export async function openSession({ root, config, seed, run = {} }) {
   const server = await serveDir(path.resolve(root, config.build));
   let chrome = null;
   let cdp = null;
@@ -65,6 +66,9 @@ export async function openSession({ root, config, seed }) {
     // Без эмуляции фокуса игра может поймать blur и уйти на паузу.
     await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: shimSource({ seed, fps: config.fps }) });
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewSource() });
+    // Параметры прогона (тема и т. п.) — до моста: он читает их при загрузке.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__botRun = ${JSON.stringify(run)};` });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: bridge });
     await cdp.send('Page.navigate', { url: server.url });
     await waitForBridge(cdp, config.limits.bootTimeoutMs);
@@ -119,6 +123,22 @@ export async function openSession({ root, config, seed }) {
     },
     step: (n) => call(`window.__botShim.stepUntilEvents(${Math.max(1, Math.floor(n))})`),
     errors: () => cdp.errors.map((e) => ({ ...e, text: normalizeOrigin(e.text, server.url) })),
+    async shot(region) {
+      const page = await call(`window.__botView.pageRect(${json(region)})`, 'pageRect');
+      const clip = {
+        x: Math.floor(page.x), y: Math.floor(page.y),
+        width: Math.ceil(page.width), height: Math.ceil(page.height), scale: 1,
+      };
+      const size = await call('({ w: innerWidth, h: innerHeight })', 'viewport');
+      // Пустая вырезка или вырезка за краем — ошибка проверки проекта.
+      if (!(clip.width > 0 && clip.height > 0) || clip.x < 0 || clip.y < 0 || clip.x + clip.width > size.w || clip.y + clip.height > size.h) {
+        const error = new Error(`вырезка вне страницы или пустая: ${JSON.stringify(clip)}`);
+        error.adapterFault = true;
+        throw error;
+      }
+      const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', clip });
+      return Buffer.from(data, 'base64');
+    },
     async screenshot(file) {
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
       await writeFile(file, Buffer.from(data, 'base64'));

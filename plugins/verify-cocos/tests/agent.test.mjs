@@ -202,3 +202,12 @@ test('исключение в проверке проекта — bot-error', as
   assert.equal(result.verdict, 'bot-error');
   assert.match(result.violation.message, /опечатка/);
 });
+
+test('неверная вырезка проверки (adapterFault из onShot) — bot-error', async () => {
+  const adapter = toyAdapter({ checks: [{ id: 'look', kind: 'expectation', level: 'pixel', within: 0, when: (p, c) => (c.x === 2 ? {} : null), region: () => ({ x: 0, y: 0, w: 0, h: 0 }) }] });
+  const trace = createTrace();
+  const rng = mulberry32(1);
+  const result = await runAgent({ game: toyGame(), adapter, mission: { name: 'reach', params: {} }, policy: createPolicy('planned', rng), rng, limits: LIMITS, trace,
+    onShot: async () => { const e = new Error('вырезка вне страницы или пустая'); e.adapterFault = true; throw e; } });
+  assert.equal(result.verdict, 'bot-error');
+});

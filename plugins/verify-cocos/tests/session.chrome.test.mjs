@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSession, normalizeOrigin } from '../scripts/lib/session.mjs';
+import { decodePng } from '../scripts/vendor/cdp/png.mjs';
 import { chromePath } from '../scripts/vendor/cdp/chrome.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -70,4 +71,16 @@ test('случайный порт сервера вырезается из те�
   const url = 'http://127.0.0.1:61234/';
   assert.equal(normalizeOrigin('at f (http://127.0.0.1:61234/assets/main/index.js:3:5)', url), 'at f (/assets/main/index.js:3:5)');
   assert.equal(normalizeOrigin('без адреса', url), 'без адреса');
+});
+
+test('параметры прогона видны в странице, вырезка — PNG нужного размера', { skip: !hasChrome }, async () => {
+  const game = await openSession({ root, config: config('shot-bridge.js'), seed: 1, run: { theme: 'minimal' } });
+  try {
+    await game.start({});
+    assert.deepEqual((await game.observe()).run, { theme: 'minimal' });
+    const png = decodePng(await game.shot({ x: 0, y: 0, w: 32, h: 16 }));
+    assert.equal(png.width, 32);
+    assert.equal(png.height, 16);
+    await assert.rejects(game.shot({ x: 0, y: 0, w: 0, h: 10 }), (e) => e.adapterFault === true);
+  } finally { await game.close(); }
 });
