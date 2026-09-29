@@ -77,7 +77,10 @@ test('параметры прогона видны в странице, выре
   const game = await openSession({ root, config: config('shot-bridge.js'), seed: 1, run: { theme: 'minimal' } });
   try {
     await game.start({});
-    assert.deepEqual((await game.observe()).run, { theme: 'minimal' });
+    const seen = await game.observe();
+    assert.deepEqual(seen.run, { theme: 'minimal' });
+    // Размер страницы — ровно viewport конфига: от него зависят координаты вырезок.
+    assert.deepEqual(seen.size, [320, 240]);
     const png = decodePng(await game.shot({ x: 0, y: 0, w: 32, h: 16 }));
     assert.equal(png.width, 32);
     assert.equal(png.height, 16);

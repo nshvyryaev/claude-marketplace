@@ -65,6 +65,12 @@ export async function openSession({ root, config, seed, run = {} }) {
     cdp = await connect(chrome.port);
     // Без эмуляции фокуса игра может поймать blur и уйти на паузу.
     await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    // Размер страницы — ровно viewport конфига. --window-size задаёт окно, а
+    // не область отрисовки: в headless она выходит другой, и координаты
+    // вырезок и вид игры плыли бы от машины к машине.
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: config.viewport.width, height: config.viewport.height, deviceScaleFactor: 1, mobile: false,
+    });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: shimSource({ seed, fps: config.fps }) });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewSource() });
     // Параметры прогона (тема и т. п.) — до моста: он читает их при загрузке.

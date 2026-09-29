@@ -4,7 +4,7 @@
     preload: async () => true,
     start: () => true,
     ready: () => true,
-    observe: () => ({ run: window.__botRun }),
+    observe: () => ({ run: window.__botRun, size: [innerWidth, innerHeight] }),
     actions: () => [],
     act: () => [],
     frameEvents: () => [],
