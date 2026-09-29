@@ -28,6 +28,16 @@ export async function connect(port) {
   // после каждого шага — иначе асинхронная ошибка проскочит между шагами.
   const errors = [];
 
+  // Закрытый сокет или упавшая страница отклоняют все ожидающие вызовы:
+  // иначе промис ждал бы ответа, который уже не придёт, и прогон висел бы.
+  let closedReason = null;
+  const failAll = (reason) => {
+    closedReason ??= reason;
+    for (const { reject, method } of pending.values()) reject(new Error(`CDP ${method}: ${reason}`));
+    pending.clear();
+  };
+  socket.onclose = () => failAll('соединение с Chrome закрыто');
+
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
 
@@ -50,6 +60,11 @@ export async function connect(port) {
       errors.push({ kind: 'log', text: message.params.entry.text });
     }
 
+    if (message.method === 'Inspector.targetCrashed') {
+      errors.push({ kind: 'crash', text: 'страница упала (Inspector.targetCrashed)' });
+      failAll('страница упала');
+    }
+
     if (message.id && pending.has(message.id)) {
       const { resolve, reject, method: pendingMethod } = pending.get(message.id);
       pending.delete(message.id);
@@ -60,6 +75,10 @@ export async function connect(port) {
 
   const send = (method, params = {}) =>
     new Promise((resolve, reject) => {
+      if (closedReason) {
+        reject(new Error(`CDP ${method}: ${closedReason}`));
+        return;
+      }
       const id = ++nextId;
       pending.set(id, { resolve, reject, method });
       socket.send(JSON.stringify({ id, method, params }));
@@ -68,6 +87,7 @@ export async function connect(port) {
   await send('Page.enable');
   await send('Runtime.enable');
   await send('Log.enable');
+  await send('Inspector.enable');
 
   // Значение выражения возвращается по значению; исключение внутри страницы
   // поднимается как ошибка здесь, а не молча превращается в undefined.
@@ -97,6 +117,9 @@ export async function connect(port) {
     evaluate,
     errors,
     clearErrors: () => errors.splice(0, errors.length),
-    close: () => socket.close(),
+    close: () => {
+      failAll('соединение с Chrome закрыто');
+      socket.close();
+    },
   };
 }

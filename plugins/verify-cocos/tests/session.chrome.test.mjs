@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openSession } from '../scripts/lib/session.mjs';
+import { openSession, normalizeOrigin } from '../scripts/lib/session.mjs';
 import { chromePath } from '../scripts/vendor/cdp/chrome.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -49,4 +49,25 @@ test('игра не загрузилась — ошибка за bootTimeoutMs, 
   const started = Date.now();
   await assert.rejects(openSession({ root, config: config('dead-bridge.js', { bootTimeoutMs: 1500 }), seed: 1 }), /не загрузилась/);
   assert.ok(Date.now() - started < 15000);
+});
+
+test('вечный preload — ошибка за bootTimeoutMs, а не зависание', { skip: !hasChrome }, async () => {
+  const game = await openSession({ root, config: config('stuck-preload-bridge.js', { bootTimeoutMs: 1500 }), seed: 1 });
+  try {
+    const started = Date.now();
+    await assert.rejects(game.start({}), /preload/);
+    assert.ok(Date.now() - started < 10000);
+  } finally { await game.close(); }
+});
+
+test('вызов после закрытия сессии отклоняется, а не висит', { skip: !hasChrome }, async () => {
+  const game = await openSession({ root, config: config('toy-bridge.js'), seed: 1 });
+  await game.close();
+  await assert.rejects(game.observe());
+});
+
+test('случайный порт сервера вырезается из текстов ошибок', () => {
+  const url = 'http://127.0.0.1:61234/';
+  assert.equal(normalizeOrigin('at f (http://127.0.0.1:61234/assets/main/index.js:3:5)', url), 'at f (/assets/main/index.js:3:5)');
+  assert.equal(normalizeOrigin('без адреса', url), 'без адреса');
 });

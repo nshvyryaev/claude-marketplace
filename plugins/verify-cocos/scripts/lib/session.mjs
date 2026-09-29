@@ -39,6 +39,13 @@ async function waitForBridge(cdp, ms) {
   throw new Error('Игра не загрузилась: мост не появился на странице');
 }
 
+// Порт сервера сборки случаен, а стеки ошибок страницы содержат полный URL.
+// В журнал он попадать не должен: replay прогона с ошибкой иначе расходился
+// бы на строке нарушения при детерминированной игре.
+export function normalizeOrigin(text, url) {
+  return String(text).split(url).join('/');
+}
+
 export async function openSession({ root, config, seed }) {
   const server = await serveDir(path.resolve(root, config.build));
   let chrome = null;
@@ -71,12 +78,21 @@ export async function openSession({ root, config, seed }) {
     throw error;
   }
 
-  const call = (expression) => cdp.evaluate(expression);
+  // Каждый вызов страницы — под таймаутом: зависший мост или рендерер не
+  // должен вешать прогон.
+  const call = async (expression, what = expression.slice(0, 60)) => {
+    try {
+      return await withTimeout(cdp.evaluate(expression), config.limits.bootTimeoutMs, `страница не ответила за ${config.limits.bootTimeoutMs} мс: ${what}`);
+    } catch (error) {
+      error.message = normalizeOrigin(error.message, server.url);
+      throw error;
+    }
+  };
   const json = (value) => JSON.stringify(value ?? null);
 
   return {
     async start(params) {
-      await call(`window.__bot.preload(${json(params)})`);
+      await call(`window.__bot.preload(${json(params)})`, 'preload');
       await call(`window.__botShim.freeze(); window.__botShim.reseed(${seed >>> 0}); true`);
       await call(`window.__bot.start(${json(params)})`);
       for (let i = 0; i < config.limits.startFrames; i++) {
@@ -102,7 +118,7 @@ export async function openSession({ root, config, seed }) {
       return ops;
     },
     step: (n) => call(`window.__botShim.stepUntilEvents(${Math.max(1, Math.floor(n))})`),
-    errors: () => cdp.errors.slice(),
+    errors: () => cdp.errors.map((e) => ({ ...e, text: normalizeOrigin(e.text, server.url) })),
     async screenshot(file) {
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
       await writeFile(file, Buffer.from(data, 'base64'));
