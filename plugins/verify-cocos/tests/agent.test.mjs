@@ -211,3 +211,14 @@ test('неверная вырезка проверки (adapterFault из onShot
     onShot: async () => { const e = new Error('вырезка вне страницы или пустая'); e.adapterFault = true; throw e; } });
   assert.equal(result.verdict, 'bot-error');
 });
+
+test('после выполнения миссии взведённые ожидания досматриваются до срока', async () => {
+  const adapter = toyAdapter({
+    checks: [{ id: 'late', kind: 'expectation', level: 'fact', within: 6, when: (p, c) => (c.x === 5 ? {} : null), then: (c, ev, t) => (t.n = (t.n ?? 0) + 1) >= 3 }],
+  });
+  const { result } = await run({ adapter, limits: { drainFrames: 20 } });
+  assert.equal(result.verdict, 'pass');
+  const cov = result.coverage.find((c) => c.id === 'late');
+  assert.equal(cov.confirmed, 1, JSON.stringify(cov));
+  assert.equal(cov.unfinished, 0);
+});

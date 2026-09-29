@@ -17,7 +17,7 @@ export const DEFAULTS = {
   start: { level: 0 },
   limits: {
     maxFrames: 36000, stallFrames: 1800, goalTimeoutFrames: 1200, maxGoalFailures: 5,
-    randomActionFrames: 30, startFrames: 3000, settleMs: 10, bootTimeoutMs: 60000, traceTail: 200,
+    randomActionFrames: 30, startFrames: 3000, settleMs: 10, bootTimeoutMs: 60000, traceTail: 200, drainFrames: 120,
   },
   policy: 'planned',
   soak: { seeds: 20, mission: 'capture-80', policies: ['planned', 'every:2', 'burst:30/10', 'random'] },

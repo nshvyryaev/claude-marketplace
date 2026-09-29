@@ -46,6 +46,62 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
 
   trace.write({ f: 0, t: 'mission', mission: missionSpec.name, params: missionSpec.params ?? {} });
 
+  // Разбор результата шага: события, наблюдение, ошибки консоли, проверки,
+  // вырезки. Возвращает нарушение или null.
+  const afterStep = async (stepped) => {
+    frame += stepped.frames;
+    events = stepped.events;
+    for (const event of events) trace.write({ f: frame, t: 'event', ...event });
+
+    const prev = model;
+    raw = await game.observe();
+    model = guard(() => adapter.toModel(raw), 'toModel');
+
+    const errors = game.errors();
+    if (errors.length > 0) {
+      const violation = { id: 'console-error', message: errors.map((e) => e.text).join(' | '), data: errors };
+      trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
+      return violation;
+    }
+    const checked = guard(() => runner.observe(prev, model, events, { frame }), 'checks');
+    for (const entry of checked.log) trace.write({ f: frame, ...entry });
+    let violation = checked.violation;
+    for (const shot of checked.shots) {
+      let shotResult;
+      try {
+        shotResult = await onShot({ ...shot, frame });
+      } catch (error) {
+        // Вырезка, которую нельзя снять, — ошибка проверки проекта.
+        if (error.adapterFault) throw new AdapterError(`${shot.id}: ${error.message}`);
+        throw error;
+      }
+      const { outcome, violation: shotViolation } = shotResult;
+      runner.resolveShot(shot.id, outcome);
+      trace.write({ f: frame, t: 'shot', check: shot.id, n: shot.n, outcome });
+      violation ??= shotViolation ?? null;
+    }
+    if (violation) {
+      trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
+    }
+    return violation;
+  };
+
+  // Миссия выполнена, а часть ожиданий ещё ждёт срока (например, вырезка
+  // через 60 кадров после потери жизни): досматриваем их, не трогая ввод.
+  const drain = async () => {
+    const budget = limits.drainFrames ?? 120;
+    let spent = 0;
+    while (runner.nextDeadline(frame) < Infinity && spent < budget) {
+      const n = Math.max(1, Math.min(runner.nextDeadline(frame), budget - spent));
+      trace.write({ f: frame, t: 'drain', frames: n });
+      const stepped = await game.step(n);
+      spent += stepped.frames;
+      const violation = await afterStep(stepped);
+      if (violation) return violation;
+    }
+    return null;
+  };
+
   try {
     // Миссия — объект или фабрика по параметрам прогона. Её создание и
     // исполнитель проверок — код адаптера: ошибка в них — bot-error.
@@ -55,7 +111,10 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
     model = guard(() => adapter.toModel(raw), 'toModel');
 
     for (;;) {
-      if (guard(() => mission.done(model, events), 'mission.done')) return end('pass');
+      if (guard(() => mission.done(model, events), 'mission.done')) {
+        const violation = await drain();
+        return violation ? end('bug', violation) : end('pass');
+      }
       if (events.some((event) => event.type === 'gameOver')) return end('lose');
       if (frame >= limits.maxFrames) return end('timeout');
       if (limits.stopAt != null && frame >= limits.stopAt) return end('stopped');
@@ -147,41 +206,8 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
       }
       trace.write({ f: frame, t: 'act', goal: goal?.id ?? null, action, frames, by });
       const stepped = await game.step(frames);
-      frame += stepped.frames;
-      events = stepped.events;
-      for (const event of events) trace.write({ f: frame, t: 'event', ...event });
-
-      const prev = model;
-      raw = await game.observe();
-      model = guard(() => adapter.toModel(raw), 'toModel');
-
-      const errors = game.errors();
-      if (errors.length > 0) {
-        const violation = { id: 'console-error', message: errors.map((e) => e.text).join(' | '), data: errors };
-        trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
-        return end('bug', violation);
-      }
-      const checked = guard(() => runner.observe(prev, model, events, { frame }), 'checks');
-      for (const entry of checked.log) trace.write({ f: frame, ...entry });
-      let violation = checked.violation;
-      for (const shot of checked.shots) {
-        let shotResult;
-        try {
-          shotResult = await onShot({ ...shot, frame });
-        } catch (error) {
-          // Вырезка, которую нельзя снять, — ошибка проверки проекта.
-          if (error.adapterFault) throw new AdapterError(`${shot.id}: ${error.message}`);
-          throw error;
-        }
-        const { outcome, violation: shotViolation } = shotResult;
-        runner.resolveShot(shot.id, outcome);
-        trace.write({ f: frame, t: 'shot', check: shot.id, n: shot.n, outcome });
-        violation ??= shotViolation ?? null;
-      }
-      if (violation) {
-        trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
-        return end('bug', violation);
-      }
+      const violation = await afterStep(stepped);
+      if (violation) return end('bug', violation);
     }
   } catch (error) {
     if (error instanceof AdapterError) {
