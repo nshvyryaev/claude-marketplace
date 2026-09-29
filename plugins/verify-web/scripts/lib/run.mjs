@@ -9,7 +9,7 @@ import path from 'node:path';
 import { launchChrome } from '../vendor/cdp/chrome.mjs';
 import { connect } from '../vendor/cdp/cdp.mjs';
 import { makeSteps, VerifyFailure } from './steps.mjs';
-import { diffPng } from './png.mjs';
+import { diffPng } from '../vendor/cdp/png.mjs';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
