@@ -111,7 +111,7 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
     model = guard(() => adapter.toModel(raw), 'toModel');
 
     for (;;) {
-      if (guard(() => mission.done(model, events), 'mission.done')) {
+      if (guard(() => mission.done(model, events, { frame }), 'mission.done')) {
         const violation = await drain();
         return violation ? end('bug', violation) : end('pass');
       }
@@ -121,8 +121,10 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
 
       if (goal) {
         let result = null;
-        if (guard(() => goal.done(model, events), 'goal.done')) result = 'done';
-        else if (guard(() => goal.failed(model, events), 'goal.failed')) result = 'failed';
+        // Кадры с начала цели: цель может сдаться сама, не дожидаясь таймаута.
+        const goalCtx = { frame, goalFrames: frame - goalStart };
+        if (guard(() => goal.done(model, events, goalCtx), 'goal.done')) result = 'done';
+        else if (guard(() => goal.failed(model, events, goalCtx), 'goal.failed')) result = 'failed';
         else if (frame - goalStart >= limits.goalTimeoutFrames) result = 'timeout';
         else if (events.some((event) => adapter.replanOn.includes(event.type))) result = 'replan';
         if (result) {

@@ -222,3 +222,13 @@ test('после выполнения миссии взведённые ожид
   assert.equal(cov.confirmed, 1, JSON.stringify(cov));
   assert.equal(cov.unfinished, 0);
 });
+
+test('цель получает кадры с начала цели и может сдаться сама', async () => {
+  const seen = [];
+  const adapter = toyAdapter({
+    candidates: () => [{ kind: 'idle', id: 'idle', score: 1, params: {}, done: () => false, failed: (m, ev, ctx) => { seen.push(ctx.goalFrames); return ctx.goalFrames >= 4; } }],
+  });
+  const { trace } = await run({ adapter, limits: { maxFrames: 12, stallFrames: 1000, goalTimeoutFrames: 1000 } });
+  assert.ok(seen.includes(0) && seen.some((n) => n >= 4), JSON.stringify(seen));
+  assert.ok(trace.entries.some((e) => e.t === 'goal-end' && e.result === 'failed'));
+});

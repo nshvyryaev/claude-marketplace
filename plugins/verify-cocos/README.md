@@ -101,7 +101,7 @@ verify/
 
 ### Цель (что возвращает `candidates`)
 
-`{ kind, id, score, params, done(model, events), failed(model, events) }`.
+`{ kind, id, score, params, done(model, events, ctx), failed(model, events, ctx) }`, `ctx = { frame, goalFrames }` — цель может сдаться сама.
 Оценку считает проект; движок сравнивает числа. `kind` выбирает тактику.
 
 ## Проверки (`checks.mjs`)
