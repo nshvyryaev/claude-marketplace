@@ -16,7 +16,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runScenarios } from './lib/run.mjs';
-import { zonesForFiles, selectScenarios } from './lib/zones.mjs';
+import { zonesForFiles, selectScenarios } from './vendor/cdp/zones.mjs';
 import { formatReport, exitCode } from './lib/report.mjs';
 
 function parseArgs(argv) {

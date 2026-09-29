@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchesPattern, normalizePath, zonesForFiles, selectScenarios } from '../scripts/lib/zones.mjs';
+import { matchesPattern, normalizePath, zonesForFiles, selectScenarios } from '../shared/cdp/zones.mjs';
 
 const BACKSLASH = String.fromCharCode(92);
 

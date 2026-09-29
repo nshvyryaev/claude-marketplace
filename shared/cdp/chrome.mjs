@@ -54,10 +54,10 @@ async function readDevToolsPort(profile, timeoutMs = 15000) {
   throw new Error('Chrome не поднялся: DevToolsActivePort не появился');
 }
 
-export async function launchChrome({ width = 390, height = 844, scale = 2 } = {}) {
+export async function launchChrome({ width = 390, height = 844, scale = 2, prefix = 'verify-web-' } = {}) {
   // Профиль вне проекта: внутри него dev-сервер видит файлы и перезагружает
   // страницу прямо посреди сценария.
-  const profile = await mkdtemp(path.join(os.tmpdir(), 'verify-web-'));
+  const profile = await mkdtemp(path.join(os.tmpdir(), prefix));
   const proc = spawn(chromePath(), [
     '--headless=new',
     '--remote-debugging-port=0',

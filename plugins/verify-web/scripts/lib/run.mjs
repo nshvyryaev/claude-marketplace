@@ -6,8 +6,8 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { launchChrome } from './chrome.mjs';
-import { connect } from './cdp.mjs';
+import { launchChrome } from '../vendor/cdp/chrome.mjs';
+import { connect } from '../vendor/cdp/cdp.mjs';
 import { makeSteps, VerifyFailure } from './steps.mjs';
 import { diffPng } from './png.mjs';
 
