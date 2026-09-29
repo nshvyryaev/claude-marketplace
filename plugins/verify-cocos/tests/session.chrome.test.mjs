@@ -85,5 +85,9 @@ test('параметры прогона видны в странице, выре
     assert.equal(png.width, 32);
     assert.equal(png.height, 16);
     await assert.rejects(game.shot({ x: 0, y: 0, w: 0, h: 10 }), (e) => e.adapterFault === true);
+    // У края страницы вырезка обрезается, а не отклоняется.
+    const edge = decodePng(await game.shot({ x: 300, y: 230, w: 40, h: 20 }));
+    assert.deepEqual([edge.width, edge.height], [20, 10]);
+    await assert.rejects(game.shot({ x: 400, y: 10, w: 10, h: 10 }), (e) => e.adapterFault === true);
   } finally { await game.close(); }
 });

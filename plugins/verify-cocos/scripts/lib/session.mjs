@@ -131,17 +131,19 @@ export async function openSession({ root, config, seed, run = {} }) {
     errors: () => cdp.errors.map((e) => ({ ...e, text: normalizeOrigin(e.text, server.url) })),
     async shot(region) {
       const page = await call(`window.__botView.pageRect(${json(region)})`, 'pageRect');
-      const clip = {
-        x: Math.floor(page.x), y: Math.floor(page.y),
-        width: Math.ceil(page.width), height: Math.ceil(page.height), scale: 1,
-      };
       const size = await call('({ w: innerWidth, h: innerHeight })', 'viewport');
-      // Пустая вырезка или вырезка за краем — ошибка проверки проекта.
-      if (!(clip.width > 0 && clip.height > 0) || clip.x < 0 || clip.y < 0 || clip.x + clip.width > size.w || clip.y + clip.height > size.h) {
-        const error = new Error(`вырезка вне страницы или пустая: ${JSON.stringify(clip)}`);
+      // Вырезка обрезается границами страницы: объект у края поля — обычный
+      // случай. Пустое пересечение — ошибка проверки проекта.
+      const x0 = Math.max(0, Math.floor(page.x));
+      const y0 = Math.max(0, Math.floor(page.y));
+      const x1 = Math.min(size.w, Math.ceil(page.x + page.width));
+      const y1 = Math.min(size.h, Math.ceil(page.y + page.height));
+      if (!(x1 > x0 && y1 > y0)) {
+        const error = new Error(`вырезка вне страницы или пустая: ${JSON.stringify(page)}`);
         error.adapterFault = true;
         throw error;
       }
+      const clip = { x: x0, y: y0, width: x1 - x0, height: y1 - y0, scale: 1 };
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', clip });
       return Buffer.from(data, 'base64');
     },
