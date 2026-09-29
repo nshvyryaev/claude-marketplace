@@ -34,7 +34,7 @@ export function toyAdapter(overrides = {}) {
     ],
     replanOn: ['bump'],
     tactics: { right: walk(1), left: walk(-1), idle: walk(0) },
-    oracles: [{ id: 'x-nonneg', check: (prev, cur) => (cur.x < 0 ? { message: `x=${cur.x}`, data: { x: cur.x } } : null) }],
+    checks: [{ id: 'x-nonneg', kind: 'invariant', level: 'fact', check: (prev, cur) => (cur.x < 0 ? { message: `x=${cur.x}`, data: { x: cur.x } } : null) }],
     summary: (m) => `x=${m.x}`,
     ...overrides,
   };

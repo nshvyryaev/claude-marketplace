@@ -7,7 +7,7 @@
 // Три класса исходов: баг игры (bug), беда бота (bot-stuck, bot-error,
 // timeout) и нормальный конец (pass, lose, stopped).
 import { pickIndex } from './rng.mjs';
-import { createStallOracle, checkOracles } from './oracles.mjs';
+import { createCheckRunner, createStallCheck } from './checks.mjs';
 
 const TOP_CANDIDATES = 5;
 const round = (value) => Math.round(value * 1000) / 1000;
@@ -22,10 +22,11 @@ function guard(fn, label) {
   }
 }
 
-export async function runAgent({ game, adapter, missionName, policy, rng, limits, trace }) {
-  const mission = adapter.missions[missionName];
-  if (!mission) throw new Error(`Нет миссии ${missionName}; есть: ${Object.keys(adapter.missions).join(', ')}`);
-  const stall = createStallOracle(limits.stallFrames, adapter.progress);
+export async function runAgent({ game, adapter, mission: missionSpec, policy, rng, limits, trace, onShot = async () => ({ outcome: 'review' }) }) {
+  const def = adapter.missions[missionSpec.name];
+  if (!def) throw new Error(`Нет миссии ${missionSpec.name}; есть: ${Object.keys(adapter.missions).join(', ')}`);
+  let mission = null;
+  let runner = null;
 
   let frame = 0;
   let goals = 0;
@@ -39,12 +40,17 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
 
   const end = (verdict, violation = null) => {
     trace.write({ f: frame, t: 'end', verdict, ...(violation ? { violation: violation.id } : {}) });
-    return { verdict, frame, goals, violation, lastRaw: raw, lastModel: model };
+    const coverage = runner ? runner.finish() : [];
+    return { verdict, frame, goals, violation, coverage, lastRaw: raw, lastModel: model };
   };
 
-  trace.write({ f: 0, t: 'mission', mission: missionName });
+  trace.write({ f: 0, t: 'mission', mission: missionSpec.name, params: missionSpec.params ?? {} });
 
   try {
+    // Миссия — объект или фабрика по параметрам прогона. Её создание и
+    // исполнитель проверок — код адаптера: ошибка в них — bot-error.
+    mission = guard(() => (typeof def === 'function' ? def(missionSpec.params ?? {}) : def), 'missions');
+    runner = guard(() => createCheckRunner([createStallCheck(limits.stallFrames, adapter.progress), ...(adapter.checks ?? [])]), 'checks');
     raw = await game.observe();
     model = guard(() => adapter.toModel(raw), 'toModel');
 
@@ -76,7 +82,8 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
         const candidates = guard(() => {
           const list = adapter.candidates(model, mission);
           if (!Array.isArray(list)) throw new Error(`ожидался массив целей, получено ${JSON.stringify(list)}`);
-          return list;
+          // Миссия-сценарий допускает только свои виды целей.
+          return mission.goals ? list.filter((c) => mission.goals.includes(c.kind)) : list;
         }, 'candidates');
         if (candidates.length > 0) {
           const by = policy.goal() === 'random' ? 'random' : 'score';
@@ -125,6 +132,9 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
         limits.maxFrames - frame,
         goal ? limits.goalTimeoutFrames - (frame - goalStart) : Infinity,
         limits.stopAt != null ? limits.stopAt - frame : Infinity,
+        // Срок ожидания: then проверяется в наблюдении, а длинный шаг
+        // перескочил бы момент и засчитал бы промах.
+        runner.nextDeadline(frame),
       );
       frames = Math.max(1, Math.floor(Math.min(frames, room)));
 
@@ -146,9 +156,20 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
       model = guard(() => adapter.toModel(raw), 'toModel');
 
       const errors = game.errors();
-      const violation = errors.length > 0
-        ? { id: 'console-error', message: errors.map((e) => e.text).join(' | '), data: errors }
-        : guard(() => checkOracles([stall, ...adapter.oracles], prev, model, events, { frame }), 'oracles');
+      if (errors.length > 0) {
+        const violation = { id: 'console-error', message: errors.map((e) => e.text).join(' | '), data: errors };
+        trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
+        return end('bug', violation);
+      }
+      const checked = guard(() => runner.observe(prev, model, events, { frame }), 'checks');
+      for (const entry of checked.log) trace.write({ f: frame, ...entry });
+      let violation = checked.violation;
+      for (const shot of checked.shots) {
+        const { outcome, violation: shotViolation } = await onShot({ ...shot, frame });
+        runner.resolveShot(shot.id, outcome);
+        trace.write({ f: frame, t: 'shot', check: shot.id, n: shot.n, outcome });
+        violation ??= shotViolation ?? null;
+      }
       if (violation) {
         trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
         return end('bug', violation);

@@ -112,3 +112,24 @@ export function unmetRequires(coverage, requires = []) {
     return c.level === 'fact' ? c.confirmed === 0 : c.confirmed + c.pendingReview === 0;
   });
 }
+
+// Базовая проверка плагина — «игра замерла»: наблюдаемое состояние
+// (adapter.progress, сравнивается через JSON) не меняется stallFrames кадров.
+// Рост не требуется: бесцельный бот — не баг игры, его ловят таймауты целей.
+export function createStallCheck(stallFrames, progress) {
+  let last;
+  let since = 0;
+  return {
+    id: 'stall', kind: 'invariant', level: 'fact',
+    check(prev, cur, events, { frame }) {
+      const value = JSON.stringify(progress(cur));
+      if (value !== last || events.length > 0) {
+        last = value;
+        since = frame;
+        return null;
+      }
+      if (frame - since >= stallFrames) return { message: `состояние не менялось ${frame - since} кадров`, data: { since } };
+      return null;
+    },
+  };
+}

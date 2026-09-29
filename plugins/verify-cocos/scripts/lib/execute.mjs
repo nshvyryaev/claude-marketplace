@@ -35,7 +35,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     await game.start({ level: spec.level });
     const rng = mulberry32(botSeed(spec.seed));
     result = await runAgent({
-      game, adapter, missionName: spec.mission, policy: createPolicy(spec.policy, rng), rng,
+      game, adapter, mission: typeof spec.mission === 'string' ? { name: spec.mission, params: {} } : spec.mission, policy: createPolicy(spec.policy, rng), rng,
       limits: { ...config.limits, stopAt }, trace,
     });
     // Страница стоит на кадре, где прогон закончился: при нарушении это и
