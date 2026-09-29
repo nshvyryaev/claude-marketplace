@@ -27,6 +27,11 @@
       "name": "verify-web",
       "source": "./plugins/verify-web",
       "description": "Browser verification engine over raw CDP: scenario runs, snapshot regression diffs and screenshots for visual judgement"
+    },
+    {
+      "name": "verify-cocos",
+      "source": "./plugins/verify-cocos",
+      "description": "Game-playing QA bot for Cocos Creator web builds: deterministic runs by seed, goal/tactic agent with configurable randomness, oracles, decision trace and replay"
     }
   ]
 }
