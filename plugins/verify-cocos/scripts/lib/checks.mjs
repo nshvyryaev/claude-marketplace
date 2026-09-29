@@ -109,6 +109,7 @@ export function unmetRequires(coverage, requires = []) {
   return requires.filter((id) => {
     const c = coverage.find((x) => x.id === id);
     if (!c) return true;
+    if (c.kind === 'invariant') return c.steps === 0;
     return c.level === 'fact' ? c.confirmed === 0 : c.confirmed + c.pendingReview === 0;
   });
 }

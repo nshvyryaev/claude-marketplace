@@ -102,3 +102,8 @@ test('неверная форма проверки — ошибка с id', () =
   assert.throws(() => validateChecks([{ id: 'd', kind: 'expectation', level: 'fact', when: () => null, then: () => true, within: -1 }]), /d.*within/);
   assert.throws(() => validateChecks([{ id: 'e', kind: 'rule', level: 'fact' }]), /e.*kind/);
 });
+
+test('требование к инварианту выполнено, если он проверялся хоть раз', () => {
+  assert.deepEqual(unmetRequires([{ id: 'inv', kind: 'invariant', level: 'fact', steps: 3, confirmed: 0 }], ['inv']), []);
+  assert.deepEqual(unmetRequires([{ id: 'inv', kind: 'invariant', level: 'fact', steps: 0, confirmed: 0 }], ['inv']), ['inv']);
+});
