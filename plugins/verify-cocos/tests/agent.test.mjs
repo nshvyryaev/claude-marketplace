@@ -229,6 +229,8 @@ test('цель получает кадры с начала цели и може�
     candidates: () => [{ kind: 'idle', id: 'idle', score: 1, params: {}, done: () => false, failed: (m, ev, ctx) => { seen.push(ctx.goalFrames); return ctx.goalFrames >= 4; } }],
   });
   const { trace } = await run({ adapter, limits: { maxFrames: 12, stallFrames: 1000, goalTimeoutFrames: 1000 } });
-  assert.ok(seen.includes(0) && seen.some((n) => n >= 4), JSON.stringify(seen));
+  // Цель проверяется после шагов: первое значение — длина первого шага.
+  assert.equal(seen[0], 2, JSON.stringify(seen));
+  assert.ok(seen.includes(4), JSON.stringify(seen));
   assert.ok(trace.entries.some((e) => e.t === 'goal-end' && e.result === 'failed'));
 });

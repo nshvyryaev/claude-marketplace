@@ -26,8 +26,10 @@ test('ввод, прокрутка кадров, события и виртуа�
     const ops = await game.act({ type: 'move', dir: 'right' });
     assert.deepEqual(ops, [{ type: 'keyDown', key: 'ArrowRight' }]);
     const stepped = await game.step(20);
-    assert.equal(stepped.frames, 5);
-    assert.deepEqual(stepped.events, [{ type: 'five' }]);
+    // Диагностика: тест однажды мигал под нагрузкой (причина не найдена).
+    const why = JSON.stringify({ stepped, state: await game.observe(), errors: game.errors() });
+    assert.equal(stepped.frames, 5, why);
+    assert.deepEqual(stepped.events, [{ type: 'five' }], why);
     const state = await game.observe();
     assert.equal(state.x, 5);
     const step = Math.ceil((1000 / 60) * 1024) / 1024;
