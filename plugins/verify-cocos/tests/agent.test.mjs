@@ -91,3 +91,17 @@ test('случайная политика воспроизводима: один
   assert.deepEqual(a.trace.entries, b.trace.entries);
   assert.ok(a.trace.entries.some((e) => e.by === 'random'));
 });
+
+test('stall — только когда наблюдаемое состояние не меняется, а не когда не растёт', async () => {
+  // Точка ходит туда-обратно: прогресс меняется, но не растёт. Игра жива —
+  // это не зависание; бесцельность бота ловят таймауты целей.
+  const adapter = toyAdapter({
+    progress: (m) => m.x,
+    candidates: () => [{ kind: 'swing', id: 'swing', score: 1, params: {}, done: () => false, failed: () => false }],
+    replanOn: [],
+    // Качается между x=1 и x=2: событий нет, значение меняется каждый кадр.
+    tactics: { swing: { next: (m) => ({ action: { dir: m.x <= 1 ? 1 : -1 }, frames: 1 }) } },
+  });
+  const { result } = await run({ game: toyGame({ target: 50 }), adapter, limits: { stallFrames: 10, goalTimeoutFrames: 40, maxGoalFailures: 2 } });
+  assert.equal(result.verdict, 'bot-stuck');
+});

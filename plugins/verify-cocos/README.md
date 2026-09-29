@@ -30,6 +30,8 @@ verify/
 ├── bot/
 │   ├── bridge.js     мост в странице
 │   ├── model.mjs     toModel(raw), progress(model), summary?(model)
+│   │                 progress — отпечаток наблюдаемого состояния: не меняется
+│   │                 stallFrames кадров → bug stall («игра замерла»)
 │   ├── missions.mjs  missions: { имя: { done(model, events) } }
 │   ├── goals.mjs     candidates(model, mission), replanOn
 │   ├── tactics.mjs   tactics: { kind: { next(model, goal) → { action, frames } } }
