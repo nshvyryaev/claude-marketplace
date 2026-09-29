@@ -20,7 +20,7 @@ test('fact: взведено → подтверждено в пределах wi
   assert.equal(r.observe({}, { b: false }, [], at(2)).violation, null);
   const ok = r.observe({}, { b: true }, [], at(3));
   assert.deepEqual(ok.log.map((l) => l.t), ['confirm']);
-  assert.deepEqual(byId(r.finish(), 'e'), { id: 'e', kind: 'expectation', level: 'fact', steps: 0, armed: 1, confirmed: 1, missed: 0, unfinished: 0, pendingReview: 0 });
+  assert.deepEqual(byId(r.finish(), 'e'), { id: 'e', kind: 'expectation', level: 'fact', steps: 0, armed: 1, confirmed: 1, missed: 0, cancelled: 0, unfinished: 0, pendingReview: 0 });
 });
 
 test('fact: подтверждение в том же наблюдении, где взведено', () => {
@@ -106,4 +106,24 @@ test('неверная форма проверки — ошибка с id', () =
 test('требование к инварианту выполнено, если он проверялся хоть раз', () => {
   assert.deepEqual(unmetRequires([{ id: 'inv', kind: 'invariant', level: 'fact', steps: 3, confirmed: 0 }], ['inv']), []);
   assert.deepEqual(unmetRequires([{ id: 'inv', kind: 'invariant', level: 'fact', steps: 0, confirmed: 0 }], ['inv']), ['inv']);
+});
+
+test('then может снять ожидание: снятое не подтверждение и не нарушение', () => {
+  const r = createCheckRunner([{ id: 'e', kind: 'expectation', level: 'fact', when: (p, c) => (c.a ? {} : null), then: (c) => (c.cancel ? 'cancel' : false), within: 5 }]);
+  r.observe({}, { a: true }, [], at(1));
+  const out = r.observe({}, { cancel: true }, [], at(2));
+  assert.deepEqual(out.log.map((l) => l.t), ['cancel']);
+  const cov = r.finish().find((c) => c.id === 'e');
+  assert.equal(cov.confirmed, 0);
+  assert.equal(cov.cancelled, 1);
+  assert.deepEqual(unmetRequires([cov], ['e']), ['e']);
+});
+
+test('инвариант с applies считает только применимые шаги', () => {
+  const r = createCheckRunner([{ id: 'inv', kind: 'invariant', level: 'fact', applies: (p, c) => !!c.on, check: () => null }]);
+  r.observe({}, {}, [], at(1));
+  assert.deepEqual(unmetRequires(r.finish(), ['inv']), ['inv'], 'ситуация не возникла — не проверено');
+  const r2 = createCheckRunner([{ id: 'inv', kind: 'invariant', level: 'fact', applies: (p, c) => !!c.on, check: () => null }]);
+  r2.observe({}, { on: true }, [], at(1));
+  assert.deepEqual(unmetRequires(r2.finish(), ['inv']), []);
 });

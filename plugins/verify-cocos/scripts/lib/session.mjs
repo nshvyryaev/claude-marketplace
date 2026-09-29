@@ -133,6 +133,14 @@ export async function openSession({ root, config, seed, run = {} }) {
     step: (n) => call(`window.__botShim.stepUntilEvents(${Math.max(1, Math.floor(n))})`),
     errors: () => cdp.errors.map((e) => ({ ...e, text: normalizeOrigin(e.text, server.url) })),
     async shot(region) {
+      // Неверный region проекта — ошибка адаптера, а не страницы: иначе он ушёл
+      // бы в исключение моста (bug игры) или NaN стал бы null и снял не то место.
+      const valid = region && ['x', 'y', 'w', 'h'].every((k) => Number.isFinite(region[k])) && region.w > 0 && region.h > 0;
+      if (!valid) {
+        const error = new Error(`неверный region вырезки: ${JSON.stringify(region)}`);
+        error.adapterFault = true;
+        throw error;
+      }
       const page = await call(`window.__botView.pageRect(${json(region)})`, 'pageRect');
       const size = await call('({ w: innerWidth, h: innerHeight })', 'viewport');
       // Вырезка обрезается границами страницы: объект у края поля — обычный

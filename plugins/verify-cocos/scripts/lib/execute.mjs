@@ -28,13 +28,15 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
   const trace = createTrace();
   trace.write({
     f: 0, t: 'start', name: spec.name, seed: spec.seed, level: spec.level, theme: spec.theme ?? null,
-    mission, policy: spec.policy, adapter: hash, env: await runEnv(root, config),
+    mission, policy: spec.policy, adapter: hash, env,
   });
 
   let game = null;
   let result;
   const review = [];
+  const stale = [];
   let needsReview = 0;
+  const env = await runEnv(root, config);
   const baselineDir = path.resolve(root, config.baseline, spec.name);
   // Вырезка по сроку ожидания: agent — на осмотр агентом; pixel — сравнение
   // с эталоном прогона.
@@ -48,8 +50,13 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
       review.push({ id: shot.id, n: shot.n, criterion: shot.criterion, frame: shot.frame, trigger: shot.trigger, file: path.relative(root, file).split(path.sep).join('/') });
       return { outcome: 'review' };
     }
-    const r = await compareShot({ png, name, baselineDir, newDir: path.join(outDir, 'baseline-new'), update, ...config.pixel });
+    const r = await compareShot({ png, name, baselineDir, newDir: path.join(outDir, 'baseline-new'), update, ...config.pixel, meta: { adapter: hash, build: env.build } });
     if (r.outcome === 'new') needsReview++;
+    if (r.outcome === 'stale') {
+      needsReview++;
+      stale.push({ name, changed: r.changed, ratio: r.ratio });
+      return { outcome: 'new' };
+    }
     if (r.outcome === 'mismatch') {
       return { outcome: 'mismatch', violation: { id: shot.id, message: `пиксели разошлись с эталоном ${name}: доля ${r.ratio}`, data: { name } } };
     }
@@ -87,6 +94,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     coverage: result.coverage ?? [],
     unmet: unmetRequires(result.coverage ?? [], spec.requires ?? []),
     needsReview,
+    stale,
     review,
     requires: spec.requires ?? [],
   };

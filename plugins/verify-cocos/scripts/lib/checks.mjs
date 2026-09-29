@@ -29,7 +29,7 @@ export function validateChecks(checks) {
 export function createCheckRunner(checks) {
   validateChecks(checks);
   const stats = new Map(checks.map((c) => [c.id, {
-    id: c.id, kind: c.kind, level: c.level, steps: 0, armed: 0, confirmed: 0, missed: 0, unfinished: 0, pendingReview: 0,
+    id: c.id, kind: c.kind, level: c.level, steps: 0, armed: 0, confirmed: 0, missed: 0, cancelled: 0, unfinished: 0, pendingReview: 0,
   }]));
   let pending = [];
 
@@ -42,6 +42,9 @@ export function createCheckRunner(checks) {
 
       for (const c of checks) {
         if (c.kind !== 'invariant') continue;
+        // applies: инвариант считается проверенным только там, где его ситуация
+        // возникла, — иначе requires выполнялся бы даром.
+        if (c.applies && !c.applies(prev, cur, events, ctx)) continue;
         stats.get(c.id).steps++;
         const v = c.check(prev, cur, events, ctx);
         if (v) fail({ id: c.id, message: v.message, data: v.data ?? null });
@@ -61,7 +64,12 @@ export function createCheckRunner(checks) {
       for (const p of pending) {
         const s = stats.get(p.check.id);
         if (p.check.level === 'fact') {
-          if (p.check.then(cur, events, p.trigger)) {
+          const verdict = p.check.then(cur, events, p.trigger);
+          if (verdict === 'cancel') {
+            // Снято: ситуация сменилась, проверять нечего. Не подтверждение.
+            s.cancelled++;
+            log.push({ t: 'cancel', check: p.check.id, n: p.n });
+          } else if (verdict) {
             s.confirmed++;
             log.push({ t: 'confirm', check: p.check.id, n: p.n });
           } else if (ctx.frame >= p.deadline) {

@@ -34,3 +34,13 @@ test('расхождение — mismatch с долей и diff-файлом', a
   assert.equal(r.ratio, 1);
   assert.deepEqual((await readdir(d.newDir)).sort(), ['a.diff.png', 'a.png']);
 });
+
+test('расхождение при другом адаптере или сборке — stale с перечнем изменившегося, не mismatch', async () => {
+  const d = await dirs();
+  await compareShot({ png: solid(10), name: 'a', ...d, update: true, threshold: 12, tolerance: 0, meta: { adapter: 'a1', build: 'b1' } });
+  const same = await compareShot({ png: solid(200), name: 'a', ...d, update: false, threshold: 12, tolerance: 0, meta: { adapter: 'a1', build: 'b1' } });
+  assert.equal(same.outcome, 'mismatch');
+  const other = await compareShot({ png: solid(200), name: 'a', ...d, update: false, threshold: 12, tolerance: 0, meta: { adapter: 'a2', build: 'b1' } });
+  assert.equal(other.outcome, 'stale');
+  assert.deepEqual(other.changed, ['adapter']);
+});

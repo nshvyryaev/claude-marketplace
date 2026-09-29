@@ -87,6 +87,9 @@ test('параметры прогона видны в странице, выре
     assert.equal(png.width, 32);
     assert.equal(png.height, 16);
     await assert.rejects(game.shot({ x: 0, y: 0, w: 0, h: 10 }), (e) => e.adapterFault === true);
+    // Неверный region проекта — ошибка адаптера до обращения к странице.
+    await assert.rejects(game.shot(undefined), (e) => e.adapterFault === true);
+    await assert.rejects(game.shot({ x: NaN, y: 0, w: 5, h: 5 }), (e) => e.adapterFault === true);
     // У края страницы вырезка обрезается, а не отклоняется.
     const edge = decodePng(await game.shot({ x: 300, y: 230, w: 40, h: 20 }));
     assert.deepEqual([edge.width, edge.height], [20, 10]);

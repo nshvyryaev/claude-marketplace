@@ -101,6 +101,7 @@ export function formatCoverage(result) {
     lines.push(`покрытие: ${cells.join(', ')}`);
   }
   if ((result.unmet ?? []).length > 0) lines.push(`не проверено: ${result.unmet.join(', ')}`);
+  for (const s of result.stale ?? []) lines.push(`эталон ${s.name} разошёлся после изменения: ${s.changed.join(', ')} — осмотреть, не баг`);
   if (result.needsReview > 0) lines.push(`новых вырезок без эталона: ${result.needsReview} → ${result.dir}/baseline-new/ (--update-baseline после осмотра)`);
   if ((result.review ?? []).length > 0) lines.push(`на осмотр агентом: ${result.review.length} → ${result.dir}/review/`);
   return lines;
