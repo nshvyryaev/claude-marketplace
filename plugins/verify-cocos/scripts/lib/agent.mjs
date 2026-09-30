@@ -7,7 +7,7 @@
 // Три класса исходов: баг игры (bug), беда бота (bot-stuck, bot-error,
 // timeout) и нормальный конец (pass, lose, stopped).
 import { pickIndex } from './rng.mjs';
-import { createStallOracle, checkOracles } from './oracles.mjs';
+import { createCheckRunner, createStallCheck } from './checks.mjs';
 
 const TOP_CANDIDATES = 5;
 const round = (value) => Math.round(value * 1000) / 1000;
@@ -22,10 +22,11 @@ function guard(fn, label) {
   }
 }
 
-export async function runAgent({ game, adapter, missionName, policy, rng, limits, trace }) {
-  const mission = adapter.missions[missionName];
-  if (!mission) throw new Error(`Нет миссии ${missionName}; есть: ${Object.keys(adapter.missions).join(', ')}`);
-  const stall = createStallOracle(limits.stallFrames, adapter.progress);
+export async function runAgent({ game, adapter, mission: missionSpec, policy, rng, limits, trace, onShot = async () => ({ outcome: 'review' }) }) {
+  const def = adapter.missions[missionSpec.name];
+  if (!def) throw new Error(`Нет миссии ${missionSpec.name}; есть: ${Object.keys(adapter.missions).join(', ')}`);
+  let mission = null;
+  let runner = null;
 
   let frame = 0;
   let goals = 0;
@@ -39,25 +40,92 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
 
   const end = (verdict, violation = null) => {
     trace.write({ f: frame, t: 'end', verdict, ...(violation ? { violation: violation.id } : {}) });
-    return { verdict, frame, goals, violation, lastRaw: raw, lastModel: model };
+    const coverage = runner ? runner.finish() : [];
+    return { verdict, frame, goals, violation, coverage, lastRaw: raw, lastModel: model };
   };
 
-  trace.write({ f: 0, t: 'mission', mission: missionName });
+  trace.write({ f: 0, t: 'mission', mission: missionSpec.name, params: missionSpec.params ?? {} });
+
+  // Разбор результата шага: события, наблюдение, ошибки консоли, проверки,
+  // вырезки. Возвращает нарушение или null.
+  const afterStep = async (stepped) => {
+    const prevFrame = frame;
+    frame += stepped.frames;
+    events = stepped.events;
+    for (const event of events) trace.write({ f: frame, t: 'event', ...event });
+
+    const prev = model;
+    raw = await game.observe();
+    model = guard(() => adapter.toModel(raw), 'toModel');
+
+    const errors = game.errors();
+    if (errors.length > 0) {
+      const violation = { id: 'console-error', message: errors.map((e) => e.text).join(' | '), data: errors };
+      trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
+      return violation;
+    }
+    const checked = guard(() => runner.observe(prev, model, events, { frame, prevFrame }), 'checks');
+    for (const entry of checked.log) trace.write({ f: frame, ...entry });
+    let violation = checked.violation;
+    for (const shot of checked.shots) {
+      let shotResult;
+      try {
+        shotResult = await onShot({ ...shot, frame });
+      } catch (error) {
+        // Вырезка, которую нельзя снять, — ошибка проверки проекта.
+        if (error.adapterFault) throw new AdapterError(`${shot.id}: ${error.message}`);
+        throw error;
+      }
+      const { outcome, violation: shotViolation } = shotResult;
+      runner.resolveShot(shot.id, outcome);
+      trace.write({ f: frame, t: 'shot', check: shot.id, n: shot.n, outcome });
+      violation ??= shotViolation ?? null;
+    }
+    if (violation) {
+      trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
+    }
+    return violation;
+  };
+
+  // Миссия выполнена, а часть ожиданий ещё ждёт срока (например, вырезка
+  // через 60 кадров после потери жизни): досматриваем их, не трогая ввод.
+  const drain = async () => {
+    const budget = limits.drainFrames ?? 120;
+    let spent = 0;
+    while (runner.nextDeadline(frame) < Infinity && spent < budget) {
+      const n = Math.max(1, Math.min(runner.nextDeadline(frame), budget - spent));
+      trace.write({ f: frame, t: 'drain', frames: n });
+      const stepped = await game.step(n);
+      spent += stepped.frames;
+      const violation = await afterStep(stepped);
+      if (violation) return violation;
+    }
+    return null;
+  };
 
   try {
+    // Миссия — объект или фабрика по параметрам прогона. Её создание и
+    // исполнитель проверок — код адаптера: ошибка в них — bot-error.
+    mission = guard(() => (typeof def === 'function' ? def(missionSpec.params ?? {}) : def), 'missions');
+    runner = guard(() => createCheckRunner([createStallCheck(limits.stallFrames, adapter.progress), ...(adapter.checks ?? [])]), 'checks');
     raw = await game.observe();
     model = guard(() => adapter.toModel(raw), 'toModel');
 
     for (;;) {
-      if (guard(() => mission.done(model, events), 'mission.done')) return end('pass');
+      if (guard(() => mission.done(model, events, { frame }), 'mission.done')) {
+        const violation = await drain();
+        return violation ? end('bug', violation) : end('pass');
+      }
       if (events.some((event) => event.type === 'gameOver')) return end('lose');
       if (frame >= limits.maxFrames) return end('timeout');
       if (limits.stopAt != null && frame >= limits.stopAt) return end('stopped');
 
       if (goal) {
         let result = null;
-        if (guard(() => goal.done(model, events), 'goal.done')) result = 'done';
-        else if (guard(() => goal.failed(model, events), 'goal.failed')) result = 'failed';
+        // Кадры с начала цели: цель может сдаться сама, не дожидаясь таймаута.
+        const goalCtx = { frame, goalFrames: frame - goalStart };
+        if (guard(() => goal.done(model, events, goalCtx), 'goal.done')) result = 'done';
+        else if (guard(() => goal.failed(model, events, goalCtx), 'goal.failed')) result = 'failed';
         else if (frame - goalStart >= limits.goalTimeoutFrames) result = 'timeout';
         else if (events.some((event) => adapter.replanOn.includes(event.type))) result = 'replan';
         if (result) {
@@ -76,7 +144,8 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
         const candidates = guard(() => {
           const list = adapter.candidates(model, mission);
           if (!Array.isArray(list)) throw new Error(`ожидался массив целей, получено ${JSON.stringify(list)}`);
-          return list;
+          // Миссия-сценарий допускает только свои виды целей.
+          return mission.goals ? list.filter((c) => mission.goals.includes(c.kind)) : list;
         }, 'candidates');
         if (candidates.length > 0) {
           const by = policy.goal() === 'random' ? 'random' : 'score';
@@ -125,6 +194,9 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
         limits.maxFrames - frame,
         goal ? limits.goalTimeoutFrames - (frame - goalStart) : Infinity,
         limits.stopAt != null ? limits.stopAt - frame : Infinity,
+        // Срок ожидания: then проверяется в наблюдении, а длинный шаг
+        // перескочил бы момент и засчитал бы промах.
+        runner.nextDeadline(frame),
       );
       frames = Math.max(1, Math.floor(Math.min(frames, room)));
 
@@ -137,22 +209,8 @@ export async function runAgent({ game, adapter, missionName, policy, rng, limits
       }
       trace.write({ f: frame, t: 'act', goal: goal?.id ?? null, action, frames, by });
       const stepped = await game.step(frames);
-      frame += stepped.frames;
-      events = stepped.events;
-      for (const event of events) trace.write({ f: frame, t: 'event', ...event });
-
-      const prev = model;
-      raw = await game.observe();
-      model = guard(() => adapter.toModel(raw), 'toModel');
-
-      const errors = game.errors();
-      const violation = errors.length > 0
-        ? { id: 'console-error', message: errors.map((e) => e.text).join(' | '), data: errors }
-        : guard(() => checkOracles([stall, ...adapter.oracles], prev, model, events, { frame }), 'oracles');
-      if (violation) {
-        trace.write({ f: frame, t: 'violation', oracle: violation.id, message: violation.message, data: violation.data });
-        return end('bug', violation);
-      }
+      const violation = await afterStep(stepped);
+      if (violation) return end('bug', violation);
     }
   } catch (error) {
     if (error instanceof AdapterError) {

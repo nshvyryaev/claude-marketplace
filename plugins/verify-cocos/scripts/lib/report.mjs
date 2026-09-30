@@ -23,7 +23,8 @@ export function formatRunLine(result) {
   const head = `${mark} ${result.verdict.padEnd(9)} ${result.name}  кадров ${result.frame}  целей ${result.goals ?? 0}`;
   const summary = result.summary ? `  ${result.summary}` : '';
   const violation = result.violation ? `\n    ${result.violation.id}: ${result.violation.message}` : '';
-  return `${head}${summary}  [${verdictClass(result.verdict)}]${violation}\n    ${result.dir}`;
+  const coverage = formatCoverage(result).map((line) => `\n    ${line}`).join('');
+  return `${head}${summary}  [${verdictClass(result.verdict)}]${violation}${coverage}\n    ${result.dir}`;
 }
 
 export function summarizeSoak(results) {
@@ -82,4 +83,26 @@ export function startDifferences(was, now) {
     if (JSON.stringify(was.env?.[key]) !== JSON.stringify(now.env?.[key])) diffs.push(`env.${key}`);
   }
   return diffs;
+}
+
+export function runOk(result, expect) {
+  return expectMatches(result, expect) && (result.unmet ?? []).length === 0 && (result.needsReview ?? 0) === 0;
+}
+
+export function formatCoverage(result) {
+  const lines = [];
+  const expectations = (result.coverage ?? []).filter((c) => c.kind === 'expectation' && (c.armed > 0 || (result.requires ?? []).includes(c.id)));
+  if (expectations.length > 0) {
+    const cells = expectations.map((c) => {
+      const ok = c.missed === 0 && (c.confirmed > 0 || c.pendingReview > 0);
+      const extra = [c.level !== 'fact' ? c.level : null, c.unfinished ? `не дождался ${c.unfinished}` : null].filter(Boolean).join(', ');
+      return `${c.id} ${c.confirmed}/${c.armed} ${ok ? '✓' : '✗'}${extra ? ` (${extra})` : ''}`;
+    });
+    lines.push(`покрытие: ${cells.join(', ')}`);
+  }
+  if ((result.unmet ?? []).length > 0) lines.push(`не проверено: ${result.unmet.join(', ')}`);
+  for (const s of result.stale ?? []) lines.push(`эталон ${s.name} разошёлся после изменения: ${s.changed.join(', ')} — осмотреть, не баг`);
+  if (result.needsReview > 0) lines.push(`новых вырезок без эталона: ${result.needsReview} → ${result.dir}/baseline-new/ (--update-baseline после осмотра)`);
+  if ((result.review ?? []).length > 0) lines.push(`на осмотр агентом: ${result.review.length} → ${result.dir}/review/`);
+  return lines;
 }

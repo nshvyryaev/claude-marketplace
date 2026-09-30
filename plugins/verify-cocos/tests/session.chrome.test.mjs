@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSession, normalizeOrigin } from '../scripts/lib/session.mjs';
+import { decodePng } from '../scripts/vendor/cdp/png.mjs';
 import { chromePath } from '../scripts/vendor/cdp/chrome.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -25,8 +26,10 @@ test('ввод, прокрутка кадров, события и виртуа�
     const ops = await game.act({ type: 'move', dir: 'right' });
     assert.deepEqual(ops, [{ type: 'keyDown', key: 'ArrowRight' }]);
     const stepped = await game.step(20);
-    assert.equal(stepped.frames, 5);
-    assert.deepEqual(stepped.events, [{ type: 'five' }]);
+    // Диагностика: тест однажды мигал под нагрузкой (причина не найдена).
+    const why = JSON.stringify({ stepped, state: await game.observe(), errors: game.errors() });
+    assert.equal(stepped.frames, 5, why);
+    assert.deepEqual(stepped.events, [{ type: 'five' }], why);
     const state = await game.observe();
     assert.equal(state.x, 5);
     const step = Math.ceil((1000 / 60) * 1024) / 1024;
@@ -70,4 +73,36 @@ test('случайный порт сервера вырезается из те�
   const url = 'http://127.0.0.1:61234/';
   assert.equal(normalizeOrigin('at f (http://127.0.0.1:61234/assets/main/index.js:3:5)', url), 'at f (/assets/main/index.js:3:5)');
   assert.equal(normalizeOrigin('без адреса', url), 'без адреса');
+});
+
+test('параметры прогона видны в странице, вырезка — PNG нужного размера', { skip: !hasChrome }, async () => {
+  const game = await openSession({ root, config: config('shot-bridge.js'), seed: 1, run: { theme: 'minimal' } });
+  try {
+    await game.start({});
+    const seen = await game.observe();
+    assert.deepEqual(seen.run, { theme: 'minimal' });
+    // Размер страницы — ровно viewport конфига: от него зависят координаты вырезок.
+    assert.deepEqual(seen.size, [320, 240]);
+    const png = decodePng(await game.shot({ x: 0, y: 0, w: 32, h: 16 }));
+    assert.equal(png.width, 32);
+    assert.equal(png.height, 16);
+    await assert.rejects(game.shot({ x: 0, y: 0, w: 0, h: 10 }), (e) => e.adapterFault === true);
+    // Неверный region проекта — ошибка адаптера до обращения к странице.
+    await assert.rejects(game.shot(undefined), (e) => e.adapterFault === true);
+    await assert.rejects(game.shot({ x: NaN, y: 0, w: 5, h: 5 }), (e) => e.adapterFault === true);
+    // У края страницы вырезка обрезается, а не отклоняется.
+    const edge = decodePng(await game.shot({ x: 300, y: 230, w: 40, h: 20 }));
+    assert.deepEqual([edge.width, edge.height], [20, 10]);
+    await assert.rejects(game.shot({ x: 400, y: 10, w: 10, h: 10 }), (e) => e.adapterFault === true);
+  } finally { await game.close(); }
+});
+
+test('потерянный фокус канваса возвращается перед вводом', { skip: !hasChrome }, async () => {
+  const game = await openSession({ root, config: config('blur-bridge.js'), seed: 1 });
+  try {
+    await game.start({});
+    await game.act({ type: 'move', dir: 'right' });
+    await game.step(3);
+    assert.equal((await game.observe()).x, 3);
+  } finally { await game.close(); }
 });

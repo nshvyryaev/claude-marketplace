@@ -9,9 +9,12 @@
 //   node verify-cocos.mjs soak [--seeds 50] [--policies planned,random]
 //   node verify-cocos.mjs replay tmp/bot/<прогон> [--until 1200]
 //   node verify-cocos.mjs probe [--level 0] [--seed 1]  состояние и действия после старта
+//   node verify-cocos.mjs coverage                     какие проверки какими прогонами подтверждены
+//   run: --update-baseline (принять вырезки), --theme <id> (тема вместо заданной прогоном)
 //
 // Общие флаги: --root <каталог проекта>, --config <файл>, --json.
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loadConfig, loadAdapter, loadRuns, checkMissions } from './lib/project.mjs';
@@ -21,7 +24,7 @@ import { readTraceLines } from './lib/trace.mjs';
 import { parsePattern, policySlug } from './lib/policy.mjs';
 import { zonesForFiles, selectScenarios } from './vendor/cdp/zones.mjs';
 import {
-  expectMatches, formatRunLine, summarizeSoak, formatSoakSummary,
+  runOk, formatRunLine, summarizeSoak, formatSoakSummary,
   exitCodeRun, exitCodeSoak, compareTraces, startDifferences,
 } from './lib/report.mjs';
 
@@ -75,12 +78,14 @@ async function commandRun() {
   log(`Прогонов: ${selected.length} (${reason}), адаптер ${hash}`);
   const results = [];
   for (const spec of selected) {
-    const result = await executeRun({ root, config, adapter, hash, spec, outDir: path.join(outRoot, `${spec.name}-${stamp()}`) });
-    result.ok = expectMatches(result, spec.expect);
+    const run = { ...spec, theme: args.values.theme ?? spec.theme };
+    const result = await executeRun({ root, config, adapter, hash, spec: run, outDir: path.join(outRoot, `${spec.name}-${stamp()}`), update: args.flags.has('update-baseline') });
+    result.ok = runOk(result, spec.expect);
     result.expect = spec.expect;
     results.push(result);
     log(formatRunLine(result));
   }
+  await saveCoverage(results);
   if (json) console.log(JSON.stringify({ reason, results }, null, 2));
   return exitCodeRun(results);
 }
@@ -91,14 +96,15 @@ async function commandSoak() {
   // Опечатка в паттерне должна всплыть до запуска десятков Chrome.
   for (const policy of policies) parsePattern(policy);
   const { adapter, hash } = await loadAdapter(root, config);
-  checkMissions([{ name: 'soak', mission: config.soak.mission }], adapter);
+  const soakMission = { name: config.soak.mission, params: {} };
+  checkMissions([{ name: 'soak', mission: soakMission }], adapter);
   const batch = path.join(outRoot, `soak-${stamp()}`);
   log(`Soak: ${seeds} seed × ${policies.length} политик, адаптер ${hash}`);
   const results = [];
   for (let seed = 1; seed <= seeds; seed++) {
     for (const policy of policies) {
       const name = `s${seed}-${policySlug(policy)}`;
-      const spec = { name, level: config.start.level, seed, mission: config.soak.mission, policy };
+      const spec = { name, level: config.start.level, seed, mission: soakMission, policy, theme: config.theme, requires: [] };
       const result = await executeRun({ root, config, adapter, hash, spec, outDir: path.join(batch, name) });
       results.push(result);
       log(formatRunLine(result));
@@ -123,7 +129,7 @@ async function commandReplay() {
   }
   const stopAt = args.values.until != null ? Number(args.values.until) : null;
   const outDir = path.join(dir, `replay-${stamp()}`);
-  const spec = { name: start.name, level: start.level, seed: start.seed, mission: start.mission, policy: start.policy };
+  const spec = { name: start.name, level: start.level, seed: start.seed, mission: start.mission, policy: start.policy, theme: start.theme ?? null };
   const result = await executeRun({ root, config, adapter, hash, spec, outDir, stopAt });
   log(formatRunLine(result));
   const replayed = await readTraceLines(path.join(outDir, 'trace.jsonl'));
@@ -138,7 +144,7 @@ async function commandReplay() {
 async function commandProbe() {
   const level = Number(args.values.level ?? config.start.level);
   const seed = Number(args.values.seed ?? 1);
-  const game = await openSession({ root, config, seed });
+  const game = await openSession({ root, config, seed, run: { theme: args.values.theme ?? config.theme } });
   try {
     await game.start({ level });
     const state = await game.observe();
@@ -150,7 +156,40 @@ async function commandProbe() {
   }
 }
 
-const COMMANDS = { run: commandRun, soak: commandSoak, replay: commandReplay, probe: commandProbe };
+// coverage.json: { [проверка]: { [прогон]: подтверждений } } — копится между
+// запусками run, чтобы частичный прогон не стирал покрытие остальных.
+const coverageFile = () => path.join(outRoot, 'coverage.json');
+
+async function saveCoverage(results) {
+  const file = coverageFile();
+  const data = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {};
+  for (const result of results) {
+    if (result.verdict === 'error') continue;
+    for (const c of result.coverage) {
+      data[c.id] ??= {};
+      data[c.id][result.name] = c.kind === 'invariant' ? c.steps : c.confirmed + c.pendingReview;
+    }
+  }
+  await mkdir(outRoot, { recursive: true });
+  await writeFile(file, JSON.stringify(data, null, 2));
+}
+
+async function commandCoverage() {
+  const file = coverageFile();
+  if (!existsSync(file)) { console.error('Нет данных покрытия: сначала run.'); return 1; }
+  const data = JSON.parse(await readFile(file, 'utf8'));
+  const { adapter } = await loadAdapter(root, config);
+  let uncovered = 0;
+  for (const check of adapter.checks) {
+    const runs = Object.entries(data[check.id] ?? {}).filter(([, n]) => n > 0).map(([name]) => name);
+    if (runs.length === 0 && check.kind === 'expectation') uncovered++;
+    log(`${check.id} (${check.kind}/${check.level}): ${runs.length > 0 ? runs.join(', ') : '— ни одним прогоном'}`);
+  }
+  log(uncovered > 0 ? `Не подтверждено ожиданий: ${uncovered}` : 'Все ожидания подтверждены хотя бы одним прогоном.');
+  return uncovered > 0 ? 1 : 0;
+}
+
+const COMMANDS = { run: commandRun, soak: commandSoak, replay: commandReplay, probe: commandProbe, coverage: commandCoverage };
 if (!COMMANDS[command]) {
   console.error(`Команда: ${Object.keys(COMMANDS).join(' | ')}. См. шапку verify-cocos.mjs.`);
   process.exit(2);

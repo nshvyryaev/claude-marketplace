@@ -9,7 +9,7 @@ import { toyGame, toyAdapter, LIMITS } from './helpers/toy.mjs';
 async function run({ game = toyGame(), adapter = toyAdapter(), policy = 'planned', limits = {}, mission = 'reach', seed = 1 } = {}) {
   const trace = createTrace();
   const rng = mulberry32(seed);
-  const result = await runAgent({ game, adapter, missionName: mission, policy: createPolicy(policy, rng), rng, limits: { ...LIMITS, ...limits }, trace });
+  const result = await runAgent({ game, adapter, mission: { name: mission, params: {} }, policy: createPolicy(policy, rng), rng, limits: { ...LIMITS, ...limits }, trace });
   return { result, trace, game };
 }
 
@@ -143,4 +143,102 @@ test('при случайных действиях таймауты целей �
   const game = toyGame(); game.actions = async () => [{ dir: 0 }];
   const { result } = await run({ game, adapter, policy: 'random', limits: { goalTimeoutFrames: 5, maxGoalFailures: 2, maxFrames: 60, stallFrames: 1000 } });
   assert.equal(result.verdict, 'timeout');
+});
+
+test('ожидание подтверждается и попадает в покрытие', async () => {
+  const adapter = toyAdapter({
+    checks: [{ id: 'bump-then-moved', kind: 'expectation', level: 'fact', within: 4,
+      when: (p, c, ev) => (ev.some((e) => e.type === 'bump') ? { x: c.x } : null),
+      then: (c, ev, t) => c.x !== t.x }],
+  });
+  const { result, trace } = await run({ adapter });
+  const cov = result.coverage.find((c) => c.id === 'bump-then-moved');
+  assert.ok(cov.armed >= 1 && cov.confirmed >= 1, JSON.stringify(cov));
+  assert.ok(trace.entries.some((e) => e.t === 'arm') && trace.entries.some((e) => e.t === 'confirm'));
+});
+
+test('шаг урезается до срока ожидания', async () => {
+  const adapter = toyAdapter({
+    tactics: { right: { next: () => ({ action: { dir: 1 }, frames: 50 }) }, left: { next: () => ({ action: { dir: -1 }, frames: 1 }) } },
+    // Взводится на x=3 (там событие bump и шаг обрывается), подтверждается на x=5.
+    checks: [{ id: 'soon', kind: 'expectation', level: 'fact', within: 2, when: (p, c) => (c.x === 3 ? {} : null), then: (c) => c.x >= 5 }],
+    replanOn: [],
+  });
+  const game = toyGame({ target: 5 }); const steps = []; const step = game.step; game.step = (n) => { steps.push(n); return step(n); };
+  const { result } = await run({ game, adapter });
+  assert.ok(steps[1] <= 2, `шаг после взвода ${steps[1]}`);
+  assert.equal(result.coverage.find((c) => c.id === 'soon').confirmed, 1);
+});
+
+test('миссия фильтрует цели по goals', async () => {
+  const adapter = toyAdapter({ missions: { reach: { done: (m) => m.x === m.target, goals: ['left'] } } });
+  const { trace } = await run({ adapter, limits: { maxFrames: 20, stallFrames: 1000 } });
+  assert.equal(trace.entries.find((e) => e.t === 'plan').chosen, 'go-left');
+});
+
+test('миссия-фабрика получает параметры', async () => {
+  const adapter = toyAdapter({ missions: { reachAt: (params) => ({ done: (m) => m.x === params.at }) } });
+  const trace = createTrace();
+  const rng = mulberry32(1);
+  const result = await runAgent({ game: toyGame({ target: 50 }), adapter, mission: { name: 'reachAt', params: { at: 2 } }, policy: createPolicy('planned', rng), rng, limits: LIMITS, trace });
+  assert.equal(result.verdict, 'pass');
+  assert.equal(result.frame, 2);
+});
+
+test('вырезка с нарушением от onShot — bug', async () => {
+  const adapter = toyAdapter({ checks: [{ id: 'look', kind: 'expectation', level: 'pixel', within: 0, when: (p, c) => (c.x === 2 ? {} : null), region: () => ({ x: 0, y: 0, w: 1, h: 1 }) }] });
+  const trace = createTrace();
+  const rng = mulberry32(1);
+  const result = await runAgent({ game: toyGame(), adapter, mission: { name: 'reach', params: {} }, policy: createPolicy('planned', rng), rng, limits: LIMITS, trace,
+    onShot: async () => ({ outcome: 'mismatch', violation: { id: 'look', message: 'пиксели разошлись', data: null } }) });
+  assert.equal(result.verdict, 'bug');
+  assert.equal(result.violation.id, 'look');
+  assert.ok(trace.entries.some((e) => e.t === 'shot' && e.outcome === 'mismatch'));
+});
+
+test('исключение в проверке проекта — bot-error', async () => {
+  const adapter = toyAdapter({ checks: [{ id: 'boom', kind: 'invariant', level: 'fact', check: () => { throw new Error('опечатка'); } }] });
+  const { result } = await run({ adapter });
+  assert.equal(result.verdict, 'bot-error');
+  assert.match(result.violation.message, /опечатка/);
+});
+
+test('неверная вырезка проверки (adapterFault из onShot) — bot-error', async () => {
+  const adapter = toyAdapter({ checks: [{ id: 'look', kind: 'expectation', level: 'pixel', within: 0, when: (p, c) => (c.x === 2 ? {} : null), region: () => ({ x: 0, y: 0, w: 0, h: 0 }) }] });
+  const trace = createTrace();
+  const rng = mulberry32(1);
+  const result = await runAgent({ game: toyGame(), adapter, mission: { name: 'reach', params: {} }, policy: createPolicy('planned', rng), rng, limits: LIMITS, trace,
+    onShot: async () => { const e = new Error('вырезка вне страницы или пустая'); e.adapterFault = true; throw e; } });
+  assert.equal(result.verdict, 'bot-error');
+});
+
+test('после выполнения миссии взведённые ожидания досматриваются до срока', async () => {
+  const adapter = toyAdapter({
+    checks: [{ id: 'late', kind: 'expectation', level: 'fact', within: 6, when: (p, c) => (c.x === 5 ? {} : null), then: (c, ev, t) => (t.n = (t.n ?? 0) + 1) >= 3 }],
+  });
+  const { result } = await run({ adapter, limits: { drainFrames: 20 } });
+  assert.equal(result.verdict, 'pass');
+  const cov = result.coverage.find((c) => c.id === 'late');
+  assert.equal(cov.confirmed, 1, JSON.stringify(cov));
+  assert.equal(cov.unfinished, 0);
+});
+
+test('цель получает кадры с начала цели и может сдаться сама', async () => {
+  const seen = [];
+  const adapter = toyAdapter({
+    candidates: () => [{ kind: 'idle', id: 'idle', score: 1, params: {}, done: () => false, failed: (m, ev, ctx) => { seen.push(ctx.goalFrames); return ctx.goalFrames >= 4; } }],
+  });
+  const { trace } = await run({ adapter, limits: { maxFrames: 12, stallFrames: 1000, goalTimeoutFrames: 1000 } });
+  // Цель проверяется после шагов: первое значение — длина первого шага.
+  assert.equal(seen[0], 2, JSON.stringify(seen));
+  assert.ok(seen.includes(4), JSON.stringify(seen));
+  assert.ok(trace.entries.some((e) => e.t === 'goal-end' && e.result === 'failed'));
+});
+
+test('проверка знает кадр предыдущего наблюдения: 0 — это стартовое состояние', async () => {
+  const seen = [];
+  const adapter = toyAdapter({ checks: [{ id: 'start', kind: 'invariant', level: 'fact', check: (p, c, ev, ctx) => { seen.push(ctx.prevFrame); return null; } }] });
+  await run({ adapter });
+  assert.equal(seen[0], 0);
+  assert.ok(seen[1] > 0);
 });

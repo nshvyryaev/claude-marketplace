@@ -1,6 +1,6 @@
 ---
 name: verify-cocos
-description: Use when writing or tuning a verify-cocos bot adapter for a Cocos Creator game (bridge, model, missions, goals, tactics, oracles), or when a verify-cocos run returns bug / bot-stuck / bot-error and needs diagnosis.
+description: Use when writing or tuning a verify-cocos bot adapter for a Cocos Creator game (bridge, model, missions, goals, tactics, checks, baselines), or when a verify-cocos run returns bug / bot-stuck / bot-error and needs diagnosis.
 ---
 
 # Адаптер бота verify-cocos
@@ -20,7 +20,7 @@ description: Use when writing or tuning a verify-cocos bot adapter for a Cocos C
    мост сравнивает снимок прошлого кадра с текущим (счётчики, флаги).
 4. **Модель — чистые функции на JSON.** Вся тяжёлая логика (регионы, пути,
    предсказание врагов) — в `model.mjs` / `goals.mjs`, под `node:test`.
-5. **Оракул — наблюдаемое правило игры, не пересказ моста.** «Жизни убывают
+5. **Проверка — наблюдаемое правило игры, не пересказ моста.** «Жизни убывают
    только с событием lifeLost», когда lifeLost и есть убыль жизней, — тавтология.
    Хороший оракул сверяет две независимые величины: убыль жизней и исчезновение
    следа, рост захвата и победу на пороге.
@@ -33,3 +33,33 @@ description: Use when writing or tuning a verify-cocos bot adapter for a Cocos C
 - `bot-stuck` — тактика не доводит цель: смотри `goal-end` с `timeout`.
 - `bot-error` — исключение в адаптере, текст в `violation.message`.
 - `replay` разошёлся при том же хэше адаптера — недетерминизм в игре.
+
+## Уровень проверки
+
+| Ситуация | Уровень |
+|---|---|
+| машинных фактов (ECS, дерево узлов) достаточно | `fact` |
+| сомнение, что факты отражают вид | `pixel` |
+| эталон часто ломается без бага | назад на `fact` |
+| `fact` пропустил баг | поднять на `pixel` |
+| проверка ходила туда-сюда | `agent` |
+
+Пирамида: `fact` — большинство, `pixel` — меньше, `agent` — меньше всего.
+Каждый переход — строка в `history` проверки с датой и причиной.
+
+Вырезки `pixel` не включают заливку поля и анимированный фон: только игрок,
+враг, иконки HUD, полоса. Эталон детерминирован seed'ом и темой прогона.
+
+## Смена эталона
+
+1. Строка `start` журнала и предупреждение `replay` покажут, менялись ли
+   адаптер, сборка или лимиты.
+2. Открой эталон, снимок и diff из `baseline-new/`.
+3. Вид поменялся осознанно — прими: `run --update-baseline --run <имя>`.
+   Нет — это баг игры.
+4. Решение — строкой в `history` проверки.
+
+## Требования прогона
+
+Прогон с «не проверено» не зелёный: сценарий не взвёл ожидание. Чини миссию
+или тактику, а не список `requires`.

@@ -53,8 +53,8 @@ import { checkMissions, buildFingerprint } from '../scripts/lib/project.mjs';
 
 test('прогон с несуществующей миссией отклоняется до запуска', () => {
   const adapter = { missions: { 'capture-80': {} } };
-  assert.doesNotThrow(() => checkMissions([{ name: 'a', mission: 'capture-80' }], adapter));
-  assert.throws(() => checkMissions([{ name: 'b', mission: 'capture-90' }], adapter), /b.*capture-90.*capture-80/);
+  assert.doesNotThrow(() => checkMissions([{ name: 'a', mission: { name: 'capture-80', params: {} } }], adapter));
+  assert.throws(() => checkMissions([{ name: 'b', mission: { name: 'capture-90', params: {} } }], adapter), /b.*capture-90.*capture-80/);
 });
 
 test('отпечаток сборки меняется при пересборке', async () => {
@@ -65,4 +65,32 @@ test('отпечаток сборки меняется при пересборк
   const before = await buildFingerprint(root, config);
   await writeFile(path.join(root, 'b', 'index.html'), '<p>2</p>');
   assert.notEqual(await buildFingerprint(root, config), before);
+});
+
+test('mission строкой и объектом нормализуется, тема и requires по умолчанию', async () => {
+  const root = await project();
+  await writeFile(path.join(root, 'verify', 'runs', 'a.json'), JSON.stringify({ zone: 'z', level: 0, seed: 1, mission: 'm', expect: {} }));
+  await writeFile(path.join(root, 'verify', 'runs', 'b.json'), JSON.stringify({ zone: 'z', level: 0, seed: 1, mission: { name: 'use', type: 2 }, theme: 'minimal', requires: ['x'], expect: {} }));
+  const [a, b] = await loadRuns(root, await loadConfig(root));
+  assert.deepEqual(a.mission, { name: 'm', params: {} });
+  assert.deepEqual(a.requires, []);
+  assert.deepEqual(b.mission, { name: 'use', params: { type: 2 } });
+  assert.equal(b.theme, 'minimal');
+});
+
+test('миссия-фабрика без обязательного параметра — ошибка до запуска', () => {
+  const use = (params) => ({ done: () => false });
+  use.required = ['type'];
+  assert.throws(() => checkMissions([{ name: 'r', mission: { name: 'use', params: {} } }], { missions: { use } }), /r.*type/);
+  assert.doesNotThrow(() => checkMissions([{ name: 'r', mission: { name: 'use', params: { type: 2 } } }], { missions: { use } }));
+});
+
+test('хэш адаптера меняется при правке модуля во вложенном каталоге', async () => {
+  const root = await project();
+  await mkdir(path.join(root, 'verify', 'bot', 'rules'), { recursive: true });
+  await writeFile(path.join(root, 'verify', 'bot', 'rules', 'a.mjs'), 'export const x = 1;');
+  const config = await loadConfig(root);
+  const before = await adapterHash(root, config);
+  await writeFile(path.join(root, 'verify', 'bot', 'rules', 'a.mjs'), 'export const x = 2;');
+  assert.notEqual(await adapterHash(root, config), before);
 });

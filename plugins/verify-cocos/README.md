@@ -32,11 +32,12 @@ verify/
 │   ├── model.mjs     toModel(raw), progress(model), summary?(model)
 │   │                 progress — отпечаток наблюдаемого состояния: не меняется
 │   │                 stallFrames кадров → bug stall («игра замерла»)
-│   ├── missions.mjs  missions: { имя: { done(model, events) } }
+│   ├── missions.mjs  missions: { имя: объект | (params) => объект }
 │   ├── goals.mjs     candidates(model, mission), replanOn
 │   ├── tactics.mjs   tactics: { kind: { next(model, goal) → { action, frames } } }
-│   └── oracles.mjs   oracles: [{ id, check(prev, cur, events, { frame }) }]
-└── runs/*.json
+│   └── checks.mjs    checks: [инвариант | ожидание] — см. «Проверки»
+├── runs/*.json
+└── baseline/<прогон>/<проверка>-<n>.png   пиксельные эталоны
 ```
 
 ### `verify/cocos.json`
@@ -53,7 +54,10 @@ verify/
   "policy": "planned",
   "soak": { "seeds": 20, "mission": "capture-80",
             "policies": ["planned", "every:2", "burst:30/10", "random"] },
-  "zones": { "assets/scripts/**": ["gameplay"] }
+  "zones": { "assets/scripts/**": ["gameplay"] },
+  "theme": "minimal",
+  "pixel": { "threshold": 12, "tolerance": 0.002 },
+  "baseline": "verify/baseline"
 }
 ```
 
@@ -74,21 +78,74 @@ verify/
 После старта уровня плагин фокусирует `#GameCanvas`: Cocos слушает клавиатуру на
 канвасе.
 
+### Вид (`window.__botView`) и параметры прогона
+
+Плагин внедряет общий для Cocos помощник чтения дерева узлов:
+
+| Метод | Что возвращает |
+|---|---|
+| `node(path)` | `{ active, worldRect: { x, y, w, h }, opacity, color, children }` или `null`; путь от корня сцены через `/`; `opacity` — с учётом `UIOpacity` предков |
+| `find(className)` | `[{ path, active, worldRect, opacity }]` для всех узлов с компонентом |
+| `pageRect(worldRect)` | CSS px страницы — по узлу `Canvas` и элементу `#GameCanvas` |
+
+Мост решает, какие факты вида положить в `observe().view`; раскладка узлов по
+темам — таблица в мосте. Параметры прогона (`theme` и др.) — в
+`window.__botRun` до загрузки моста.
+
+### Миссия
+
+Объект `{ done(model, events), goals?: [kind…] }` или фабрика
+`(params) => объект` с обязательными параметрами в свойстве `required`.
+`goals` ограничивает виды краткосрочных целей: так миссия-сценарий («потерять
+жизнь от врага на следе») загоняет бота в нужное поведение.
+
 ### Цель (что возвращает `candidates`)
 
-`{ kind, id, score, params, done(model, events), failed(model, events) }`.
+`{ kind, id, score, params, done(model, events, ctx), failed(model, events, ctx) }`, `ctx = { frame, goalFrames }` — цель может сдаться сама. Проверки получают `ctx = { frame, prevFrame }`; `prevFrame === 0` — `prev` это стартовое состояние.
 Оценку считает проект; движок сравнивает числа. `kind` выбирает тактику.
 
-### Прогон (`verify/runs/<имя>.json`)
+## Проверки (`checks.mjs`)
+
+```js
+// инвариант — всегда
+{ id, kind: 'invariant', level: 'fact', check(prev, cur, events, ctx) → null | { message, data } }
+
+// ожидание — когда X, то в течение within кадров Y
+{ id, kind: 'expectation', level: 'fact' | 'pixel' | 'agent',
+  when(prev, cur, events, ctx) → null | trigger,
+  then(cur, events, trigger) → boolean,     // fact
+  region(cur, trigger) → { x, y, w, h },    // pixel, agent — мировые px
+  within, criterion?, history: ['дата уровень: почему'] }
+```
+
+- **fact**: `then` не наступило за `within` кадров — `bug`.
+- **pixel**: через `within` кадров вырезка сравнивается с эталоном
+  `verify/baseline/<прогон>/<проверка>-<n>.png`. Расхождение — `bug` (эталон,
+  снимок и diff в `baseline-new/`); эталона нет — прогон `needs-review`.
+- **agent**: вырезка и `criterion` — в `review/` прогона на осмотр агентом;
+  прогон не падает.
+- Прогон кончился до срока — «не дождался»: ни подтверждение, ни нарушение.
+- Шаг агента урезается до ближайшего срока ожидания.
+
+**Покрытие.** По каждой проверке — взведено / подтверждено / нарушено / не
+дождался. `requires` прогона — ожидания, которые обязаны подтвердиться.
+
+## Прогон (`verify/runs/<имя>.json`)
 
 ```json
-{ "title": "Бот проходит уровень 1 без нарушений", "zone": "gameplay",
-  "level": 0, "seed": 1, "mission": "capture-80",
-  "policy": { "goal": "planned", "action": "planned" },
+{ "title": "Столкновение врага со следом отнимает жизнь", "zone": "gameplay",
+  "level": 0, "seed": 1, "theme": "minimal",
+  "mission": "lose-life-trail",
+  "requires": ["life-lost-on-trail-hit"],
+  "policy": "planned",
   "expect": { "verdict": "pass" } }
 ```
 
-`expect`: `verdict`, `verdictIn: [...]`, `maxFrames`.
+`mission` — строка или `{ "name": …, …параметры }`. `expect`: `verdict`,
+`verdictIn: [...]`, `maxFrames`.
+
+Прогон зелёный, только если: вердикт совпал с `expect`; каждое ожидание из
+`requires` подтверждено; нет пиксельных расхождений; нет вырезок без эталона.
 
 ### Паттерны случайности
 
@@ -102,8 +159,14 @@ verify/
 node scripts/verify-cocos.mjs run [--run a,b | --zone z | --since REF | --changed f1,f2]
 node scripts/verify-cocos.mjs soak [--seeds N] [--policies p1,p2]
 node scripts/verify-cocos.mjs replay tmp/bot/<прогон> [--until КАДР]
-node scripts/verify-cocos.mjs probe [--level N] [--seed S]
+node scripts/verify-cocos.mjs probe [--level N] [--seed S] [--theme id]
+node scripts/verify-cocos.mjs coverage
 ```
+
+`run --update-baseline` принимает текущие вырезки как эталоны; `run --theme id`
+подменяет тему прогонов. `coverage` — какие проверки какими прогонами
+подтверждены (по данным последних `run`); ненулевой код, если есть
+неподтверждённые ожидания.
 
 ## Вердикты
 
@@ -118,14 +181,15 @@ node scripts/verify-cocos.mjs probe [--level N] [--seed S]
 | `timeout` | бот | превышен `maxFrames` |
 | `error` | среда | сборка, Chrome, мост не загрузились |
 
-`run` завершается с ненулевым кодом, если вердикт не совпал с `expect`;
+`run` завершается с ненулевым кодом, если прогон не зелёный (см. «Прогон»);
 `soak` — если есть `bug` или `error`.
 
 ## Журнал
 
 `tmp/bot/<прогон>/trace.jsonl` — по строке на решение и событие. Поле `by`:
 `score` / `tactic` — по плану, `random` — случайный выбор, `no-goal` —
-целей не нашлось. Рядом `tail.jsonl`, `state.json`, `final.png`.
+целей не нашлось. Записи проверок: `arm`, `confirm`, `miss`, `shot`. Рядом
+`tail.jsonl`, `state.json`, `final.png`, `baseline-new/`, `review/`.
 
 ## Требования
 

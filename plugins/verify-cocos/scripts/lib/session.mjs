@@ -11,6 +11,7 @@ import { launchChrome } from '../vendor/cdp/chrome.mjs';
 import { connect } from '../vendor/cdp/cdp.mjs';
 import { serveDir } from './serve.mjs';
 import { shimSource } from './shim.mjs';
+import { viewSource } from './view.mjs';
 import { dispatchOps } from './keys.mjs';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -46,7 +47,7 @@ export function normalizeOrigin(text, url) {
   return String(text).split(url).join('/');
 }
 
-export async function openSession({ root, config, seed }) {
+export async function openSession({ root, config, seed, run = {} }) {
   const server = await serveDir(path.resolve(root, config.build));
   let chrome = null;
   let cdp = null;
@@ -64,7 +65,16 @@ export async function openSession({ root, config, seed }) {
     cdp = await connect(chrome.port);
     // Без эмуляции фокуса игра может поймать blur и уйти на паузу.
     await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    // Размер страницы — ровно viewport конфига. --window-size задаёт окно, а
+    // не область отрисовки: в headless она выходит другой, и координаты
+    // вырезок и вид игры плыли бы от машины к машине.
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: config.viewport.width, height: config.viewport.height, deviceScaleFactor: 1, mobile: false,
+    });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: shimSource({ seed, fps: config.fps }) });
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewSource() });
+    // Параметры прогона (тема и т. п.) — до моста: он читает их при загрузке.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__botRun = ${JSON.stringify(run)};` });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: bridge });
     await cdp.send('Page.navigate', { url: server.url });
     await waitForBridge(cdp, config.limits.bootTimeoutMs);
@@ -114,11 +124,40 @@ export async function openSession({ root, config, seed }) {
     actions: () => call('window.__bot.actions()'),
     async act(action) {
       const ops = (await call(`window.__bot.act(${json(action)})`)) ?? [];
+      // Фокус может уйти с канваса посреди прогона (узлы HUD, оверлеи) — без
+      // него клавиши не доходят до cc.input, и бот молча стоит на месте.
+      if (ops.length > 0) await call(`document.getElementById('GameCanvas')?.focus(); true`, 'focus');
       await dispatchOps(cdp, ops);
       return ops;
     },
     step: (n) => call(`window.__botShim.stepUntilEvents(${Math.max(1, Math.floor(n))})`),
     errors: () => cdp.errors.map((e) => ({ ...e, text: normalizeOrigin(e.text, server.url) })),
+    async shot(region) {
+      // Неверный region проекта — ошибка адаптера, а не страницы: иначе он ушёл
+      // бы в исключение моста (bug игры) или NaN стал бы null и снял не то место.
+      const valid = region && ['x', 'y', 'w', 'h'].every((k) => Number.isFinite(region[k])) && region.w > 0 && region.h > 0;
+      if (!valid) {
+        const error = new Error(`неверный region вырезки: ${JSON.stringify(region)}`);
+        error.adapterFault = true;
+        throw error;
+      }
+      const page = await call(`window.__botView.pageRect(${json(region)})`, 'pageRect');
+      const size = await call('({ w: innerWidth, h: innerHeight })', 'viewport');
+      // Вырезка обрезается границами страницы: объект у края поля — обычный
+      // случай. Пустое пересечение — ошибка проверки проекта.
+      const x0 = Math.max(0, Math.floor(page.x));
+      const y0 = Math.max(0, Math.floor(page.y));
+      const x1 = Math.min(size.w, Math.ceil(page.x + page.width));
+      const y1 = Math.min(size.h, Math.ceil(page.y + page.height));
+      if (!(x1 > x0 && y1 > y0)) {
+        const error = new Error(`вырезка вне страницы или пустая: ${JSON.stringify(page)}`);
+        error.adapterFault = true;
+        throw error;
+      }
+      const clip = { x: x0, y: y0, width: x1 - x0, height: y1 - y0, scale: 1 };
+      const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', clip });
+      return Buffer.from(data, 'base64');
+    },
     async screenshot(file) {
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
       await writeFile(file, Buffer.from(data, 'base64'));

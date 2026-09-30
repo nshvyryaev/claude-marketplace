@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { decodePng, encodePng, diffPng } from '../scripts/lib/png.mjs';
+import { decodePng, encodePng, diffPng } from '../shared/cdp/png.mjs';
 
 // Фикстуры — настоящие снимки Chrome 64x48: одна и та же страница с разной
 // надписью. Синтетический PNG проверил бы только наш собственный кодировщик.
