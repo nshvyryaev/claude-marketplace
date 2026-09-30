@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { expectMatches, verdictClass, summarizeSoak, exitCodeRun, exitCodeSoak, compareTraces, formatRunLine } from '../scripts/lib/report.mjs';
+import { expectMatches, verdictClass, summarizeSoak, exitCodeRun, exitCodeSoak, compareTraces, formatRunLine, mergeCoverage, coveredRuns } from '../scripts/lib/report.mjs';
 
 test('expect: точный вердикт, список допустимых, лимит кадров', () => {
   assert.ok(expectMatches({ verdict: 'pass', frame: 100 }, { verdict: 'pass' }));
@@ -99,4 +99,32 @@ test('покрытие печатает ожидания, требования �
   assert.ok(text.includes('b 0/1') && text.includes('pixel'), text);
   assert.match(text, /не проверено: c/);
   assert.match(text, /на осмотр/);
+});
+
+test('покрытие: засчитываются только текущий адаптер и существующие прогоны', () => {
+  const inv = (id, steps) => ({ id, kind: 'invariant', steps });
+  const exp = (id, confirmed) => ({ id, kind: 'expectation', confirmed, pendingReview: 0 });
+  let data = mergeCoverage({}, [{ name: 'a', verdict: 'pass', coverage: [inv('i', 5), exp('e', 1)] }], 'h1');
+  data = mergeCoverage(data, [{ name: 'gone', verdict: 'pass', coverage: [exp('e', 2)] }], 'h1');
+  data = mergeCoverage(data, [{ name: 'b', verdict: 'error', coverage: [exp('e', 3)] }], 'h1');
+  assert.deepEqual(coveredRuns(data, 'e', 'h1', ['a', 'b']), ['a'], 'прогона gone нет, b — error');
+  assert.deepEqual(coveredRuns(data, 'i', 'h1', ['a']), ['a']);
+  assert.deepEqual(coveredRuns(data, 'e', 'h2', ['a']), [], 'снято другим адаптером');
+  assert.deepEqual(coveredRuns({ e: { a: 4 } }, 'e', 'h1', ['a']), [], 'старый формат без адаптера');
+});
+
+test('прогон, которому не хватает только осмотра вырезок, помечен отдельно', () => {
+  const base = { name: 'r', verdict: 'pass', frame: 10, goals: 1, coverage: [], unmet: [], dir: 'd', expect: { verdict: 'pass' } };
+  const review = { ...base, needsReview: 2 };
+  review.ok = runOk(review, { verdict: 'pass' });
+  assert.equal(review.ok, false);
+  assert.match(formatRunLine(review), /^\? pass .*\[осмотр\]/);
+  const bad = { ...base, verdict: 'bug', needsReview: 2 };
+  bad.ok = runOk(bad, { verdict: 'pass' });
+  assert.match(formatRunLine(bad), /^✗/);
+});
+
+test('отчёт называет эталоны, удалённые при принятии', () => {
+  const lines = formatCoverage({ coverage: [], pruned: ['look-7.png'], dir: 'd' });
+  assert.ok(lines.some((l) => /удалены лишние эталоны: look-7\.png/.test(l)), lines.join('\n'));
 });

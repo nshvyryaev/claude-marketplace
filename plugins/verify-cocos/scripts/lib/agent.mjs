@@ -90,7 +90,8 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
   // Миссия выполнена, а часть ожиданий ещё ждёт срока (например, вырезка
   // через 60 кадров после потери жизни): досматриваем их, не трогая ввод.
   const drain = async () => {
-    const budget = limits.drainFrames ?? 120;
+    // Досмотр — часть прогона: stopAt (replay --until) и maxFrames в силе.
+    const budget = Math.min(limits.drainFrames ?? 120, (limits.maxFrames ?? Infinity) - frame, limits.stopAt != null ? limits.stopAt - frame : Infinity);
     let spent = 0;
     while (runner.nextDeadline(frame) < Infinity && spent < budget) {
       const n = Math.max(1, Math.min(runner.nextDeadline(frame), budget - spent));

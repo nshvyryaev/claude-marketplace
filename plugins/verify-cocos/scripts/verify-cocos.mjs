@@ -12,20 +12,22 @@
 //   node verify-cocos.mjs coverage                     какие проверки какими прогонами подтверждены
 //   run: --update-baseline (принять вырезки), --theme <id> (тема вместо заданной прогоном)
 //
+//   run, soak: --jobs <N> — до N прогонов одновременно (у каждого свой Chrome)
+//
 // Общие флаги: --root <каталог проекта>, --config <файл>, --json.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loadConfig, loadAdapter, loadRuns, checkMissions } from './lib/project.mjs';
-import { executeRun, runEnv } from './lib/execute.mjs';
+import { executeRun, runEnv, mapPool } from './lib/execute.mjs';
 import { openSession } from './lib/session.mjs';
 import { readTraceLines } from './lib/trace.mjs';
 import { parsePattern, policySlug } from './lib/policy.mjs';
 import { zonesForFiles, selectScenarios } from './vendor/cdp/zones.mjs';
 import {
   runOk, formatRunLine, summarizeSoak, formatSoakSummary,
-  exitCodeRun, exitCodeSoak, compareTraces, startDifferences,
+  exitCodeRun, exitCodeSoak, compareTraces, startDifferences, mergeCoverage, coveredRuns,
 } from './lib/report.mjs';
 
 function parseArgs(argv) {
@@ -50,6 +52,12 @@ const json = args.flags.has('json');
 const log = json ? () => {} : (message) => console.log(message);
 const config = await loadConfig(root, args.values.config);
 const outRoot = path.resolve(root, config.out);
+
+const jobs = () => {
+  const n = Number(args.values.jobs ?? 1);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`--jobs: целое ≥ 1, а не ${args.values.jobs}`);
+  return n;
+};
 
 async function commandRun() {
   const all = await loadRuns(root, config);
@@ -76,16 +84,15 @@ async function commandRun() {
   const { adapter, hash } = await loadAdapter(root, config);
   checkMissions(selected, adapter);
   log(`Прогонов: ${selected.length} (${reason}), адаптер ${hash}`);
-  const results = [];
-  for (const spec of selected) {
+  const results = await mapPool(selected, jobs(), async (spec) => {
     const run = { ...spec, theme: args.values.theme ?? spec.theme };
     const result = await executeRun({ root, config, adapter, hash, spec: run, outDir: path.join(outRoot, `${spec.name}-${stamp()}`), update: args.flags.has('update-baseline') });
     result.ok = runOk(result, spec.expect);
     result.expect = spec.expect;
-    results.push(result);
     log(formatRunLine(result));
-  }
-  await saveCoverage(results);
+    return result;
+  });
+  await saveCoverage(results, hash);
   if (json) console.log(JSON.stringify({ reason, results }, null, 2));
   return exitCodeRun(results);
 }
@@ -100,16 +107,18 @@ async function commandSoak() {
   checkMissions([{ name: 'soak', mission: soakMission }], adapter);
   const batch = path.join(outRoot, `soak-${stamp()}`);
   log(`Soak: ${seeds} seed × ${policies.length} политик, адаптер ${hash}`);
-  const results = [];
+  const specs = [];
   for (let seed = 1; seed <= seeds; seed++) {
     for (const policy of policies) {
       const name = `s${seed}-${policySlug(policy)}`;
-      const spec = { name, level: config.start.level, seed, mission: soakMission, policy, theme: config.theme, requires: [] };
-      const result = await executeRun({ root, config, adapter, hash, spec, outDir: path.join(batch, name) });
-      results.push(result);
-      log(formatRunLine(result));
+      specs.push({ name, level: config.start.level, seed, mission: soakMission, policy, theme: config.theme, requires: [] });
     }
   }
+  const results = await mapPool(specs, jobs(), async (spec) => {
+    const result = await executeRun({ root, config, adapter, hash, spec, outDir: path.join(batch, spec.name) });
+    log(formatRunLine(result));
+    return result;
+  });
   const summary = summarizeSoak(results);
   log(formatSoakSummary(summary));
   if (json) console.log(JSON.stringify({ summary, results }, null, 2));
@@ -156,32 +165,25 @@ async function commandProbe() {
   }
 }
 
-// coverage.json: { [проверка]: { [прогон]: подтверждений } } — копится между
-// запусками run, чтобы частичный прогон не стирал покрытие остальных.
+// Формат coverage.json и правила зачёта — mergeCoverage/coveredRuns (report.mjs).
 const coverageFile = () => path.join(outRoot, 'coverage.json');
 
-async function saveCoverage(results) {
+async function saveCoverage(results, hash) {
   const file = coverageFile();
   const data = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {};
-  for (const result of results) {
-    if (result.verdict === 'error') continue;
-    for (const c of result.coverage) {
-      data[c.id] ??= {};
-      data[c.id][result.name] = c.kind === 'invariant' ? c.steps : c.confirmed + c.pendingReview;
-    }
-  }
   await mkdir(outRoot, { recursive: true });
-  await writeFile(file, JSON.stringify(data, null, 2));
+  await writeFile(file, JSON.stringify(mergeCoverage(data, results, hash), null, 2));
 }
 
 async function commandCoverage() {
   const file = coverageFile();
   if (!existsSync(file)) { console.error('Нет данных покрытия: сначала run.'); return 1; }
   const data = JSON.parse(await readFile(file, 'utf8'));
-  const { adapter } = await loadAdapter(root, config);
+  const { adapter, hash } = await loadAdapter(root, config);
+  const runNames = (await loadRuns(root, config)).map((r) => r.name);
   let uncovered = 0;
   for (const check of adapter.checks) {
-    const runs = Object.entries(data[check.id] ?? {}).filter(([, n]) => n > 0).map(([name]) => name);
+    const runs = coveredRuns(data, check.id, hash, runNames);
     if (runs.length === 0 && check.kind === 'expectation') uncovered++;
     log(`${check.id} (${check.kind}/${check.level}): ${runs.length > 0 ? runs.join(', ') : '— ни одним прогоном'}`);
   }

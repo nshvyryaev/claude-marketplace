@@ -9,7 +9,7 @@ import { createPolicy } from './policy.mjs';
 import { mulberry32, botSeed } from './rng.mjs';
 import { buildFingerprint } from './project.mjs';
 import { safeSummary } from './report.mjs';
-import { compareShot } from './baseline.mjs';
+import { compareShot, pruneBaselines } from './baseline.mjs';
 import { unmetRequires } from './checks.mjs';
 
 const PLUGIN_JSON = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude-plugin', 'plugin.json');
@@ -37,6 +37,8 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
   const review = [];
   const stale = [];
   let needsReview = 0;
+  const taken = [];
+  let pruned = [];
   const baselineDir = path.resolve(root, config.baseline, spec.name);
   // Вырезка по сроку ожидания: agent — на осмотр агентом; pixel — сравнение
   // с эталоном прогона.
@@ -50,6 +52,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
       review.push({ id: shot.id, n: shot.n, criterion: shot.criterion, frame: shot.frame, trigger: shot.trigger, file: path.relative(root, file).split(path.sep).join('/') });
       return { outcome: 'review' };
     }
+    taken.push(name);
     const r = await compareShot({ png, name, baselineDir, newDir: path.join(outDir, 'baseline-new'), update, ...config.pixel, meta: { adapter: hash, build: env.build } });
     if (r.outcome === 'new') needsReview++;
     if (r.outcome === 'stale') {
@@ -70,6 +73,8 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
       game, adapter, mission, policy: createPolicy(spec.policy, rng), rng,
       limits: { ...config.limits, stopAt }, trace, onShot,
     });
+    // Принятые эталоны — ровно то, что снял законченный прогон.
+    if (update && (result.verdict === 'pass' || result.verdict === 'lose')) pruned = await pruneBaselines(baselineDir, taken);
     if (review.length > 0) await writeFile(path.join(outDir, 'review', 'review.json'), JSON.stringify(review, null, 2));
     // Страница стоит на кадре, где прогон закончился: при нарушении это и
     // есть снимок момента бага.
@@ -95,7 +100,23 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     unmet: unmetRequires(result.coverage ?? [], spec.requires ?? []),
     needsReview,
     stale,
+    pruned,
     review,
     requires: spec.requires ?? [],
   };
+}
+
+// Пул: до jobs задач сразу. Прогоны независимы — у каждого свой Chrome, свой
+// сервер и виртуальное время шима, поэтому параллельность не меняет их ход.
+export async function mapPool(items, jobs, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(jobs, items.length)) }, worker));
+  return out;
 }

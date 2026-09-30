@@ -242,3 +242,13 @@ test('проверка знает кадр предыдущего наблюде
   assert.equal(seen[0], 0);
   assert.ok(seen[1] > 0);
 });
+
+test('досмотр ожиданий не выходит за stopAt и maxFrames', async () => {
+  const adapter = toyAdapter({
+    checks: [{ id: 'never', kind: 'expectation', level: 'fact', within: 60, when: (p, c) => (c.x === 5 ? {} : null), then: () => false }],
+  });
+  const stopped = await run({ adapter, limits: { drainFrames: 120, stopAt: 8 } });
+  assert.ok(stopped.result.frame <= 8, `кадр ${stopped.result.frame}`);
+  const capped = await run({ adapter, limits: { drainFrames: 120, maxFrames: 9, stallFrames: 1000 } });
+  assert.ok(capped.result.frame <= 9, `кадр ${capped.result.frame}`);
+});
