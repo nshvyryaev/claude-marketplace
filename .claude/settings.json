@@ -15,5 +15,8 @@
       "Bash(git commit -m ' *)",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('plugins/pre-use-allow/.claude-plugin/plugin.json'\\)\\)\")"
     ]
+  },
+  "enabledPlugins": {
+    "plugin-dev@claude-plugins-official": true
   }
 }
