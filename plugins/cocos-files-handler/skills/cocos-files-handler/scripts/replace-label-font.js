@@ -14,11 +14,23 @@
  *     --file assets/scenes/Main.scene \
  *     --font-meta assets/resources/fonts/Factor-A-Regular-Web.ttf.meta \
  *     [--mode system|all] \
+ *     [--nodes Title,PercentLabel] \
+ *     [--exclude-nodes GearLabel] \
  *     [--dry-run]
  *
  * Modes:
  *   system  (default) — only Labels with `_isSystemFontUsed === true`.
  *   all               — every cc.Label, regardless of current font.
+ *
+ * Node filters (both optional, comma-separated, matched against the owning
+ * node's `_name`, case-sensitive):
+ *   --nodes          — restrict to labels on these nodes. Use it to give one
+ *                      role its own font (titles, numeric readouts) after a
+ *                      broad pass has set the body font on everything.
+ *   --exclude-nodes  — skip these nodes. Needed for labels whose glyphs the
+ *                      target font lacks (icon glyphs such as U+2699 ⚙), which
+ *                      must keep rendering with the system font.
+ * `--exclude-nodes` wins over `--nodes` when a name appears in both.
  *
  * Effect on each matching Label:
  *   _font                = { __uuid__, __expectedType__: 'cc.TTFFont' }
@@ -41,7 +53,12 @@ const ROOT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
 function parseArgs() {
     const argv = process.argv.slice(2);
-    const result = { file: null, fontMeta: null, mode: 'system', dryRun: false };
+    const result = {
+        file: null, fontMeta: null, mode: 'system', dryRun: false,
+        nodes: null, excludeNodes: new Set(),
+    };
+
+    const nameList = (raw) => (raw || '').split(',').map(s => s.trim()).filter(Boolean);
 
     for (let i = 0; i < argv.length; i++) {
         switch (argv[i]) {
@@ -49,6 +66,8 @@ function parseArgs() {
             case '--font-meta': result.fontMeta = argv[++i]; break;
             case '--mode':      result.mode     = argv[++i]; break;
             case '--dry-run':   result.dryRun   = true;      break;
+            case '--nodes':         result.nodes = new Set(nameList(argv[++i])); break;
+            case '--exclude-nodes': result.excludeNodes = new Set(nameList(argv[++i])); break;
         }
     }
 
@@ -57,7 +76,13 @@ function parseArgs() {
             '  --file <scene-or-prefab> \\\n' +
             '  --font-meta <path/to/Font.ttf.meta> \\\n' +
             '  [--mode system|all]   (default: system)\n' +
+            '  [--nodes Title,PercentLabel]\n' +
+            '  [--exclude-nodes GearLabel]\n' +
             '  [--dry-run]');
+        process.exit(1);
+    }
+    if (result.nodes && result.nodes.size === 0) {
+        console.error('--nodes was given but lists no names.');
         process.exit(1);
     }
     if (result.mode !== 'system' && result.mode !== 'all') {
@@ -116,6 +141,7 @@ function run() {
     const targetRef = { __uuid__: fontUuid, __expectedType__: 'cc.TTFFont' };
 
     const candidates = [];
+    const matchedNames = new Set();
     for (let i = 0; i < objects.length; i++) {
         const o = objects[i];
         if (!o || o.__type__ !== 'cc.Label') continue;
@@ -125,7 +151,21 @@ function run() {
 
         const nodeId = o.node && o.node.__id__;
         const nodeName = (nodeId != null && objects[nodeId] && objects[nodeId]._name) || '?';
+
+        if (args.excludeNodes.has(nodeName)) continue;
+        if (args.nodes && !args.nodes.has(nodeName)) continue;
+        matchedNames.add(nodeName);
+
         candidates.push({ idx: i, label: o, nodeName });
+    }
+
+    // A --nodes name that matches nothing is almost always a typo, and it fails
+    // silently otherwise: the label just keeps the font of the previous pass.
+    if (args.nodes) {
+        const missed = [...args.nodes].filter(n => !matchedNames.has(n));
+        if (missed.length > 0) {
+            console.warn(`  ! --nodes matched no label on: ${missed.join(', ')}`);
+        }
     }
 
     if (candidates.length === 0) {
@@ -141,7 +181,7 @@ function run() {
         const text = (label._string || '').replace(/\s+/g, ' ').slice(0, 40);
 
         if (alreadyTarget) {
-            console.log(`  [${idx}] ${nodeName}: already Factor — skip ("${text}")`);
+            console.log(`  [${idx}] ${nodeName}: already on target font — skip ("${text}")`);
             skipped++;
             continue;
         }

@@ -182,6 +182,80 @@ test('fails if font meta is not a TTF importer', (t) => {
     assert.match(r.stderr, /TTF font meta/);
 });
 
+test('--nodes restricts the change to the named nodes', (t) => {
+    const dir = setupSandbox(t);
+    const fontMeta = writeFontMeta(dir);
+    const scene = join(dir, 'a.scene');
+    writeFileSync(scene, JSON.stringify(makeScene([
+        { nodeName: 'Title',        text: 'heading', sys: true },
+        { nodeName: 'PercentLabel', text: '0%',      sys: true },
+        { nodeName: 'ButtonLabel',  text: 'body',    sys: true },
+    ])));
+
+    const r = run(['--file', scene, '--font-meta', fontMeta,
+        '--nodes', 'Title,PercentLabel'], { CLAUDE_PROJECT_DIR: dir });
+    assert.equal(r.status, 0, r.stderr);
+
+    const labels = JSON.parse(readFileSync(scene, 'utf8'))
+        .filter(o => o && o.__type__ === 'cc.Label');
+    assert.equal(labels[0]._font.__uuid__, FONT_UUID);
+    assert.equal(labels[1]._font.__uuid__, FONT_UUID);
+    // Not listed → left on the system font for a later pass to claim.
+    assert.equal(labels[2]._font, null);
+    assert.equal(labels[2]._isSystemFontUsed, true);
+});
+
+test('--exclude-nodes keeps a label on the system font', (t) => {
+    const dir = setupSandbox(t);
+    const fontMeta = writeFontMeta(dir);
+    const scene = join(dir, 'a.scene');
+    writeFileSync(scene, JSON.stringify(makeScene([
+        { nodeName: 'ButtonLabel', text: 'body', sys: true },
+        { nodeName: 'GearLabel',   text: '⚙', sys: true },
+    ])));
+
+    const r = run(['--file', scene, '--font-meta', fontMeta,
+        '--exclude-nodes', 'GearLabel'], { CLAUDE_PROJECT_DIR: dir });
+    assert.equal(r.status, 0, r.stderr);
+
+    const labels = JSON.parse(readFileSync(scene, 'utf8'))
+        .filter(o => o && o.__type__ === 'cc.Label');
+    assert.equal(labels[0]._font.__uuid__, FONT_UUID);
+    assert.equal(labels[1]._isSystemFontUsed, true);
+});
+
+test('--exclude-nodes wins over --nodes for the same name', (t) => {
+    const dir = setupSandbox(t);
+    const fontMeta = writeFontMeta(dir);
+    const scene = join(dir, 'a.scene');
+    writeFileSync(scene, JSON.stringify(makeScene([
+        { nodeName: 'GearLabel', text: '⚙', sys: true },
+    ])));
+
+    const r = run(['--file', scene, '--font-meta', fontMeta,
+        '--nodes', 'GearLabel', '--exclude-nodes', 'GearLabel'],
+        { CLAUDE_PROJECT_DIR: dir });
+    assert.equal(r.status, 0, r.stderr);
+
+    const label = JSON.parse(readFileSync(scene, 'utf8'))
+        .find(o => o && o.__type__ === 'cc.Label');
+    assert.equal(label._isSystemFontUsed, true);
+});
+
+test('--nodes warns about a name that matches no label', (t) => {
+    const dir = setupSandbox(t);
+    const fontMeta = writeFontMeta(dir);
+    const scene = join(dir, 'a.scene');
+    writeFileSync(scene, JSON.stringify(makeScene([
+        { nodeName: 'Title', text: 'heading', sys: true },
+    ])));
+
+    const r = run(['--file', scene, '--font-meta', fontMeta,
+        '--nodes', 'Title,Titel'], { CLAUDE_PROJECT_DIR: dir });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout + r.stderr, /matched no label on: Titel/);
+});
+
 test('reports zero matches without crashing', (t) => {
     const dir = setupSandbox(t);
     const fontMeta = writeFontMeta(dir);
