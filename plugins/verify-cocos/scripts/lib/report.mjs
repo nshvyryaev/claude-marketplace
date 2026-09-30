@@ -18,13 +18,40 @@ export function expectMatches(result, expect = {}) {
   return true;
 }
 
+// Прогон, которому до зелёного не хватает только осмотра вырезок: не баг.
+const onlyReview = (result) => result.ok === false && (result.needsReview ?? 0) > 0
+  && (result.unmet ?? []).length === 0 && expectMatches(result, result.expect);
+
 export function formatRunLine(result) {
-  const mark = result.ok === true ? '✓' : result.ok === false ? '✗' : ' ';
+  const review = onlyReview(result);
+  const mark = result.ok === true ? '✓' : review ? '?' : result.ok === false ? '✗' : ' ';
   const head = `${mark} ${result.verdict.padEnd(9)} ${result.name}  кадров ${result.frame}  целей ${result.goals ?? 0}`;
   const summary = result.summary ? `  ${result.summary}` : '';
   const violation = result.violation ? `\n    ${result.violation.id}: ${result.violation.message}` : '';
   const coverage = formatCoverage(result).map((line) => `\n    ${line}`).join('');
-  return `${head}${summary}  [${verdictClass(result.verdict)}]${violation}${coverage}\n    ${result.dir}`;
+  return `${head}${summary}  [${review ? 'осмотр' : verdictClass(result.verdict)}]${violation}${coverage}\n    ${result.dir}`;
+}
+
+// coverage.json: { [проверка]: { [прогон]: { n, adapter } } } — копится между
+// запусками run, чтобы частичный прогон не стирал покрытие остальных.
+export function mergeCoverage(data, results, adapter) {
+  const out = structuredClone(data);
+  for (const result of results) {
+    if (result.verdict === 'error') continue;
+    for (const c of result.coverage) {
+      out[c.id] ??= {};
+      out[c.id][result.name] = { n: c.kind === 'invariant' ? c.steps : c.confirmed + c.pendingReview, adapter };
+    }
+  }
+  return out;
+}
+
+// Засчитываются только записи текущего адаптера и прогонов, что ещё есть:
+// старое покрытие не должно выдавать себя за нынешнее.
+export function coveredRuns(data, id, adapter, runNames) {
+  return Object.entries(data[id] ?? {})
+    .filter(([name, e]) => runNames.includes(name) && e && e.adapter === adapter && e.n > 0)
+    .map(([name]) => name);
 }
 
 export function summarizeSoak(results) {

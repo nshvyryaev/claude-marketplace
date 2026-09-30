@@ -25,7 +25,7 @@ import { parsePattern, policySlug } from './lib/policy.mjs';
 import { zonesForFiles, selectScenarios } from './vendor/cdp/zones.mjs';
 import {
   runOk, formatRunLine, summarizeSoak, formatSoakSummary,
-  exitCodeRun, exitCodeSoak, compareTraces, startDifferences,
+  exitCodeRun, exitCodeSoak, compareTraces, startDifferences, mergeCoverage, coveredRuns,
 } from './lib/report.mjs';
 
 function parseArgs(argv) {
@@ -85,7 +85,7 @@ async function commandRun() {
     results.push(result);
     log(formatRunLine(result));
   }
-  await saveCoverage(results);
+  await saveCoverage(results, hash);
   if (json) console.log(JSON.stringify({ reason, results }, null, 2));
   return exitCodeRun(results);
 }
@@ -156,32 +156,25 @@ async function commandProbe() {
   }
 }
 
-// coverage.json: { [проверка]: { [прогон]: подтверждений } } — копится между
-// запусками run, чтобы частичный прогон не стирал покрытие остальных.
+// Формат coverage.json и правила зачёта — mergeCoverage/coveredRuns (report.mjs).
 const coverageFile = () => path.join(outRoot, 'coverage.json');
 
-async function saveCoverage(results) {
+async function saveCoverage(results, hash) {
   const file = coverageFile();
   const data = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {};
-  for (const result of results) {
-    if (result.verdict === 'error') continue;
-    for (const c of result.coverage) {
-      data[c.id] ??= {};
-      data[c.id][result.name] = c.kind === 'invariant' ? c.steps : c.confirmed + c.pendingReview;
-    }
-  }
   await mkdir(outRoot, { recursive: true });
-  await writeFile(file, JSON.stringify(data, null, 2));
+  await writeFile(file, JSON.stringify(mergeCoverage(data, results, hash), null, 2));
 }
 
 async function commandCoverage() {
   const file = coverageFile();
   if (!existsSync(file)) { console.error('Нет данных покрытия: сначала run.'); return 1; }
   const data = JSON.parse(await readFile(file, 'utf8'));
-  const { adapter } = await loadAdapter(root, config);
+  const { adapter, hash } = await loadAdapter(root, config);
+  const runNames = (await loadRuns(root, config)).map((r) => r.name);
   let uncovered = 0;
   for (const check of adapter.checks) {
-    const runs = Object.entries(data[check.id] ?? {}).filter(([, n]) => n > 0).map(([name]) => name);
+    const runs = coveredRuns(data, check.id, hash, runNames);
     if (runs.length === 0 && check.kind === 'expectation') uncovered++;
     log(`${check.id} (${check.kind}/${check.level}): ${runs.length > 0 ? runs.join(', ') : '— ни одним прогоном'}`);
   }
