@@ -113,6 +113,13 @@ export function checkMissions(runs, adapter) {
   if (problems.length > 0) {
     throw new Error(`Миссии: ${problems.join('; ')}; есть: ${Object.keys(adapter.missions).join(', ')}`);
   }
+  // Опечатка в requires иначе всплывает только после прогона — «не проверено».
+  const known = new Set((adapter.checks ?? []).map((c) => c.id));
+  const unknown = runs
+    .map((run) => [run.name, (run.requires ?? []).filter((id) => !known.has(id))])
+    .filter(([, ids]) => ids.length > 0)
+    .map(([name, ids]) => `${name}: ${ids.join(', ')}`);
+  if (unknown.length > 0) throw new Error(`В requires нет таких проверок — ${unknown.join('; ')}`);
 }
 
 // Отпечаток сборки: пересборка меняет ход прогона так же, как правка адаптера.

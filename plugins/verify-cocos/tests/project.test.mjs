@@ -94,3 +94,9 @@ test('хэш адаптера меняется при правке модуля 
   await writeFile(path.join(root, 'verify', 'bot', 'rules', 'a.mjs'), 'export const x = 2;');
   assert.notEqual(await adapterHash(root, config), before);
 });
+
+test('прогон с неизвестной проверкой в requires отклоняется до запуска', () => {
+  const adapter = { missions: { m: {} }, checks: [{ id: 'known' }] };
+  assert.doesNotThrow(() => checkMissions([{ name: 'a', mission: { name: 'm', params: {} }, requires: ['known'] }], adapter));
+  assert.throws(() => checkMissions([{ name: 'b', mission: { name: 'm', params: {} }, requires: ['known', 'typo'] }], adapter), /b.*typo/);
+});
