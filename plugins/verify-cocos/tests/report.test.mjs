@@ -123,3 +123,8 @@ test('прогон, которому не хватает только осмот
   bad.ok = runOk(bad, { verdict: 'pass' });
   assert.match(formatRunLine(bad), /^✗/);
 });
+
+test('отчёт называет эталоны, удалённые при принятии', () => {
+  const lines = formatCoverage({ coverage: [], pruned: ['look-7.png'], dir: 'd' });
+  assert.ok(lines.some((l) => /удалены лишние эталоны: look-7\.png/.test(l)), lines.join('\n'));
+});

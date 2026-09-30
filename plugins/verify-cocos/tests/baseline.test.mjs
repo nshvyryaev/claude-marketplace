@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { compareShot } from '../scripts/lib/baseline.mjs';
+import { compareShot, pruneBaselines } from '../scripts/lib/baseline.mjs';
 import { encodePng } from '../scripts/vendor/cdp/png.mjs';
 
 const solid = (v) => encodePng({ width: 4, height: 4, pixels: Buffer.alloc(4 * 4 * 4, v) });
@@ -43,4 +43,13 @@ test('расхождение при другом адаптере или сбо�
   const other = await compareShot({ png: solid(200), name: 'a', ...d, update: false, threshold: 12, tolerance: 0, meta: { adapter: 'a2', build: 'b1' } });
   assert.equal(other.outcome, 'stale');
   assert.deepEqual(other.changed, ['adapter']);
+});
+
+test('после принятия эталонов лишние вырезки прогона удаляются, meta.json остаётся', async () => {
+  const d = await dirs();
+  for (const name of ['a-1', 'a-2', 'b-1']) await compareShot({ png: solid(10), name, ...d, update: true, threshold: 12, tolerance: 0, meta: { adapter: 'h' } });
+  const removed = await pruneBaselines(d.baselineDir, ['a-1', 'b-1']);
+  assert.deepEqual(removed, ['a-2.png']);
+  assert.deepEqual((await readdir(d.baselineDir)).sort(), ['a-1.png', 'b-1.png', 'meta.json']);
+  assert.deepEqual(await pruneBaselines(path.join(d.baselineDir, 'нет'), []), [], 'каталога нет — нечего удалять');
 });

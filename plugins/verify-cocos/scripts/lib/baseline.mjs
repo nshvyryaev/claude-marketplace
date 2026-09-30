@@ -1,5 +1,5 @@
 // Пиксельные эталоны вырезок: verify/baseline/<прогон>/<проверка>-<n>.png.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { diffPng } from '../vendor/cdp/png.mjs';
@@ -37,4 +37,14 @@ export async function compareShot({ png, name, baselineDir, newDir, update, thre
   const changed = meta && was ? Object.keys(meta).filter((key) => JSON.stringify(meta[key]) !== JSON.stringify(was[key])) : [];
   if (changed.length > 0) return { outcome: 'stale', ratio, changed };
   return { outcome: 'mismatch', ratio };
+}
+
+// После --update-baseline: эталоны, которых этот прогон не снял (проверка
+// убрана или взводится реже), удаляются — иначе копятся с большим n.
+export async function pruneBaselines(baselineDir, keep) {
+  if (!existsSync(baselineDir)) return [];
+  const wanted = new Set(keep.map((name) => `${name}.png`));
+  const extra = (await readdir(baselineDir)).filter((f) => f.endsWith('.png') && !wanted.has(f)).sort();
+  for (const f of extra) await rm(path.join(baselineDir, f));
+  return extra;
 }
