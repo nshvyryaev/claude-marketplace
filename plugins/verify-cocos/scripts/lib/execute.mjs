@@ -105,3 +105,18 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     requires: spec.requires ?? [],
   };
 }
+
+// Пул: до jobs задач сразу. Прогоны независимы — у каждого свой Chrome, свой
+// сервер и виртуальное время шима, поэтому параллельность не меняет их ход.
+export async function mapPool(items, jobs, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(jobs, items.length)) }, worker));
+  return out;
+}

@@ -156,17 +156,24 @@ verify/
 ## Команды
 
 ```
-node scripts/verify-cocos.mjs run [--run a,b | --zone z | --since REF | --changed f1,f2]
-node scripts/verify-cocos.mjs soak [--seeds N] [--policies p1,p2]
+node scripts/verify-cocos.mjs run [--run a,b | --zone z | --since REF | --changed f1,f2] [--jobs N]
+node scripts/verify-cocos.mjs soak [--seeds N] [--policies p1,p2] [--jobs N]
 node scripts/verify-cocos.mjs replay tmp/bot/<прогон> [--until КАДР]
 node scripts/verify-cocos.mjs probe [--level N] [--seed S] [--theme id]
 node scripts/verify-cocos.mjs coverage
 ```
 
-`run --update-baseline` принимает текущие вырезки как эталоны; `run --theme id`
-подменяет тему прогонов. `coverage` — какие проверки какими прогонами
-подтверждены (по данным последних `run`); ненулевой код, если есть
-неподтверждённые ожидания.
+`run --update-baseline` принимает текущие вырезки как эталоны и удаляет
+эталоны, которых законченный прогон не снял; `run --theme id` подменяет тему
+прогонов. `--jobs N` — до N прогонов одновременно: у каждого свой Chrome и
+виртуальное время, журналы совпадают с последовательным запуском побайтно.
+`coverage` — какие проверки какими прогонами подтверждены (по данным `run`
+с текущим адаптером и только для прогонов, что есть в `verify/runs`);
+ненулевой код, если есть неподтверждённые ожидания. Id в `requires`
+сверяются с проверками адаптера до запуска Chrome.
+
+В строке прогона: `✓` — зелёный, `✗` — нет, `?` с классом `[осмотр]` —
+не хватает только осмотра новых или устаревших вырезок.
 
 ## Вердикты
 

@@ -18,3 +18,19 @@ test('executeRun: окружение прогона пишется в строк
   assert.equal(start.env.fps, 60);
   assert.equal(typeof start.env.build, 'string');
 });
+
+test('mapPool: не больше jobs задач одновременно, порядок результатов — порядок входа', async () => {
+  const { mapPool } = await import('../scripts/lib/execute.mjs');
+  let active = 0;
+  let peak = 0;
+  const done = [];
+  const out = await mapPool([30, 5, 20, 1, 10], 2, async (ms, i) => {
+    active++; peak = Math.max(peak, active);
+    await new Promise((r) => setTimeout(r, ms));
+    active--; done.push(i);
+    return ms * 2;
+  });
+  assert.deepEqual(out, [60, 10, 40, 2, 20]);
+  assert.equal(peak, 2);
+  assert.notDeepEqual(done, [0, 1, 2, 3, 4], 'короткие задачи обгоняют длинные');
+});
