@@ -25,6 +25,7 @@ export async function runEnv(root, config) {
 export async function executeRun({ root, config, adapter, hash, spec, outDir, stopAt = null, update = false }) {
   await mkdir(outDir, { recursive: true });
   const mission = typeof spec.mission === 'string' ? { name: spec.mission, params: {} } : spec.mission;
+  const env = await runEnv(root, config);
   const trace = createTrace();
   trace.write({
     f: 0, t: 'start', name: spec.name, seed: spec.seed, level: spec.level, theme: spec.theme ?? null,
@@ -36,7 +37,6 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
   const review = [];
   const stale = [];
   let needsReview = 0;
-  const env = await runEnv(root, config);
   const baselineDir = path.resolve(root, config.baseline, spec.name);
   // Вырезка по сроку ожидания: agent — на осмотр агентом; pixel — сравнение
   // с эталоном прогона.
