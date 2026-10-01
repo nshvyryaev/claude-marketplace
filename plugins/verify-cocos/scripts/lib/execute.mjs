@@ -28,7 +28,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
   const env = await runEnv(root, config);
   const trace = createTrace();
   trace.write({
-    f: 0, t: 'start', name: spec.name, seed: spec.seed, level: spec.level, theme: spec.theme ?? null,
+    f: 0, t: 'start', name: spec.name, seed: spec.seed, level: spec.level, theme: spec.theme ?? null, touch: !!spec.touch,
     mission, policy: spec.policy, adapter: hash, env,
   });
 
@@ -66,7 +66,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     return { outcome: r.outcome === 'updated' ? 'match' : r.outcome };
   };
   try {
-    game = await openSession({ root, config, seed: spec.seed, run: { theme: spec.theme ?? null } });
+    game = await openSession({ root, config, seed: spec.seed, run: { theme: spec.theme ?? null, touch: !!spec.touch } });
     await game.start({ level: spec.level });
     const rng = mulberry32(botSeed(spec.seed));
     result = await runAgent({

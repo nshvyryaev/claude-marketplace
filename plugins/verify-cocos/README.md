@@ -71,10 +71,14 @@ verify/
 | `ready()` | уровень готов принимать ввод |
 | `observe()` | полное состояние, JSON (`game` + `view`) |
 | `actions()` | доступные действия |
-| `act(action)` | список операций ввода `[{ type: 'keyDown'|'keyUp'|'press', key }]` — их исполняет плагин через CDP |
+| `act(action)` | список операций ввода `[{ type: 'keyDown'|'keyUp'|'press', key }]` и `[{ type: 'touchStart'|'touchMove', x, y }, { type: 'touchEnd' }]` (CSS px страницы) — их исполняет плагин через CDP |
 | `frameEvents()` | события за последний кадр; вызывается shim'ом после каждого кадра |
 
 Клавиши: `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Space`, `Enter`, `Escape`.
+Касания — одним пальцем (`Input.dispatchTouchEvent`); игра их видит, только
+если прогон задал `"touch": true` — тогда плагин включает эмуляцию тача до
+загрузки страницы (Cocos решает, слушать ли тач, при загрузке), а `touch`
+попадает в `window.__botRun`.
 После старта уровня плагин фокусирует `#GameCanvas`: Cocos слушает клавиатуру на
 канвасе.
 
@@ -141,7 +145,8 @@ verify/
   "expect": { "verdict": "pass" } }
 ```
 
-`mission` — строка или `{ "name": …, …параметры }`. `expect`: `verdict`,
+`touch: true` — прогон с эмуляцией тача (см. «Мост»). `mission` — строка или
+`{ "name": …, …параметры }`. `expect`: `verdict`,
 `verdictIn: [...]`, `maxFrames`.
 
 Прогон зелёный, только если: вердикт совпал с `expect`; каждое ожидание из

@@ -71,6 +71,9 @@ export async function openSession({ root, config, seed, run = {} }) {
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: config.viewport.width, height: config.viewport.height, deviceScaleFactor: 1, mobile: false,
     });
+    // Касания (`touch` прогона): Cocos решает, слушать ли тач, при загрузке —
+    // эмуляция включается до неё.
+    if (run.touch) await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: shimSource({ seed, fps: config.fps }) });
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewSource() });
     // Параметры прогона (тема и т. п.) — до моста: он читает их при загрузке.

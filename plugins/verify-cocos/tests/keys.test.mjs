@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { keyEvents, dispatchOps } from '../scripts/lib/keys.mjs';
+import { keyEvents, touchEvent, dispatchOps } from '../scripts/lib/keys.mjs';
 
 test('press — нажатие и отпускание с кодом клавиши', () => {
   const events = keyEvents({ type: 'press', key: 'ArrowUp' });
@@ -30,4 +30,24 @@ test('dispatchOps шлёт события по порядку', async () => {
 
 test('ошибка неизвестной клавиши помечена как ошибка адаптера', () => {
   try { keyEvents({ type: 'keyDown', key: 'KeyQ' }); assert.fail('не бросило'); } catch (error) { assert.equal(error.adapterFault, true); }
+});
+
+test('касание — одна точка в CSS px, touchEnd без точек', () => {
+  assert.deepEqual(touchEvent({ type: 'touchStart', x: 10, y: 20 }), { type: 'touchStart', touchPoints: [{ x: 10, y: 20, id: 0 }] });
+  assert.deepEqual(touchEvent({ type: 'touchMove', x: 11, y: 21 }).touchPoints, [{ x: 11, y: 21, id: 0 }]);
+  assert.deepEqual(touchEvent({ type: 'touchEnd' }), { type: 'touchEnd', touchPoints: [] });
+});
+
+test('касание без координат — ошибка адаптера', () => {
+  try { touchEvent({ type: 'touchMove', x: 1 }); assert.fail('не бросило'); } catch (error) { assert.equal(error.adapterFault, true); }
+});
+
+test('dispatchOps шлёт касания и клавиши вперемешку по порядку', async () => {
+  const sent = [];
+  await dispatchOps({ send: async (method, params) => sent.push([method, params.type]) },
+    [{ type: 'touchStart', x: 1, y: 2 }, { type: 'press', key: 'Space' }, { type: 'touchEnd' }]);
+  assert.deepEqual(sent, [
+    ['Input.dispatchTouchEvent', 'touchStart'], ['Input.dispatchKeyEvent', 'keyDown'],
+    ['Input.dispatchKeyEvent', 'keyUp'], ['Input.dispatchTouchEvent', 'touchEnd'],
+  ]);
 });

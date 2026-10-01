@@ -1,5 +1,6 @@
-// Ввод идёт настоящим путём браузера — Input.dispatchKeyEvent, — а не записью
-// в компоненты игры: так проверяется и обработка клавиш, и блокировки ввода.
+// Ввод идёт настоящим путём браузера — Input.dispatchKeyEvent и
+// Input.dispatchTouchEvent, — а не записью в компоненты игры: так проверяется и
+// обработка ввода, и его блокировки.
 export const KEYS = {
   ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
   ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
@@ -30,8 +31,25 @@ export function keyEvents(op) {
   throw adapterFault(`Неизвестный тип ввода в действии моста: ${op.type}`);
 }
 
+// Касание одним пальцем: x, y — CSS px страницы. touchEnd без точек — палец
+// поднят. Игра видит касания, только если прогон включил эмуляцию тача
+// (`touch: true`): Cocos подписывается на них по признаку при загрузке.
+const TOUCH = new Set(['touchStart', 'touchMove', 'touchEnd']);
+
+export function touchEvent(op) {
+  if (op.type === 'touchEnd') return { type: 'touchEnd', touchPoints: [] };
+  if (!Number.isFinite(op.x) || !Number.isFinite(op.y)) {
+    throw adapterFault(`Касание без координат в действии моста: ${JSON.stringify(op)}`);
+  }
+  return { type: op.type, touchPoints: [{ x: op.x, y: op.y, id: 0 }] };
+}
+
 export async function dispatchOps(cdp, ops) {
   for (const op of ops) {
+    if (TOUCH.has(op?.type)) {
+      await cdp.send('Input.dispatchTouchEvent', touchEvent(op));
+      continue;
+    }
     for (const event of keyEvents(op)) await cdp.send('Input.dispatchKeyEvent', event);
   }
 }
