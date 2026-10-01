@@ -138,7 +138,7 @@ async function commandReplay() {
   }
   const stopAt = args.values.until != null ? Number(args.values.until) : null;
   const outDir = path.join(dir, `replay-${stamp()}`);
-  const spec = { name: start.name, level: start.level, seed: start.seed, mission: start.mission, policy: start.policy, theme: start.theme ?? null, touch: !!start.touch };
+  const spec = { name: start.name, level: start.level, seed: start.seed, mission: start.mission, policy: start.policy, theme: start.theme ?? null, touch: !!start.touch, bridge: start.bridge ?? null };
   const result = await executeRun({ root, config, adapter, hash, spec, outDir, stopAt });
   log(formatRunLine(result));
   const replayed = await readTraceLines(path.join(outDir, 'trace.jsonl'));
