@@ -289,7 +289,13 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js \
       "insertAt": "last" },
 
     // Установить локальную позицию ноды (_lpos). z опционален (по умолчанию 0).
-    { "op": "set-position", "node": "PlayScreenBorder", "position": [0, -20, 0] }
+    { "op": "set-position", "node": "PlayScreenBorder", "position": [0, -20, 0] },
+
+    // Удалить ноду с потомками и их компонентами; ссылки на них — null.
+    { "op": "delete-node", "node": "JoystickBase" },
+
+    // Удалить компонент с ноды (встроенный тип или "meta:…"); ссылки на него — null.
+    { "op": "delete-component", "node": "PauseButton", "componentType": "cc.Sprite" }
   ]
 }
 ```
@@ -297,6 +303,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/cocos-files-handler/scripts/edit-prefab.js \
 **Идемпотентность:**
 - `create-node` пропускается, если у родителя уже есть ребёнок с таким именем.
 - `move-component` пропускается, если компонент уже находится на целевой ноде.
+- `delete-component` сообщает и пропускает, если компонента на ноде нет.
 - `resize-uitransform`, `set-position` и `reparent` — всегда применяются (повторный запуск не изменит результат, если значения уже такие).
 
 **Поиск нод** — по имени (`_name`). Имена должны быть уникальны среди тех, к которым обращаешься в ops. При неоднозначности скрипт падает с ошибкой.

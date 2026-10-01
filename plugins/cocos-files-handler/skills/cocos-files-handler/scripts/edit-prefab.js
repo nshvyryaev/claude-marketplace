@@ -42,6 +42,12 @@
  *                                 // rewrites all __id__ references in the file.
  *   }
  *
+ *   { "op": "delete-component",
+ *     "node": "PauseButton",
+ *     "componentType": "cc.Sprite" // or "meta:path/to/Script.ts.meta"; deletes the component and
+ *                                  // its CompPrefabInfo, rewrites __id__ references (refs → null).
+ *   }                              // Idempotent: a missing component is reported, not an error.
+ *
  *   { "op": "set-node-active",
  *     "node": "EvolutionCutscene",
  *     "active": true               // sets node._active (the serialized active flag)
@@ -441,6 +447,15 @@ function opDeleteNode(arr, op) {
         }
     }
 
+    removeObjects(arr, toDelete);
+    console.log(`  delete-node "${op.node}": removed ${toDelete.size} objects (node + descendants + components)`);
+}
+
+/**
+ * Drop the objects at the ids in `toDelete` and renumber every `__id__` left:
+ * references to dropped objects vanish from arrays and become null in fields.
+ */
+function removeObjects(arr, toDelete) {
     // Build remap old→new for retained objects.
     const remap = new Array(arr.length);
     let newIdx = 0;
@@ -488,8 +503,23 @@ function opDeleteNode(arr, op) {
 
     arr.length = 0;
     for (const o of retained) arr.push(o);
+}
 
-    console.log(`  delete-node "${op.node}": removed ${toDelete.size} objects (node + descendants + components)`);
+function opDeleteComponent(arr, op) {
+    if (!op.node || !op.componentType) throw new Error(`delete-component: "node" and "componentType" are required`);
+    const nodeId = findNodeIndex(arr, op.node);
+    const typeStr = resolveComponentType(op.componentType);
+    const ref = (arr[nodeId]._components || []).find(r => arr[r.__id__] && arr[r.__id__].__type__ === typeStr);
+    if (!ref) {
+        // Idempotent: already gone.
+        console.log(`  delete-component ${op.componentType} on "${op.node}": not present`);
+        return;
+    }
+    const toDelete = new Set([ref.__id__]);
+    const comp = arr[ref.__id__];
+    if (comp.__prefab && comp.__prefab.__id__ != null) toDelete.add(comp.__prefab.__id__);
+    removeObjects(arr, toDelete);
+    console.log(`  delete-component ${op.componentType} on "${op.node}": removed ${toDelete.size} objects`);
 }
 
 function opMoveComponent(arr, op) {
@@ -581,6 +611,7 @@ const OPS = {
     'resize-uitransform': opResizeUITransform,
     'create-node':        opCreateNode,
     'delete-node':        opDeleteNode,
+    'delete-component':   opDeleteComponent,
     'move-component':     opMoveComponent,
     'reparent':           opReparent,
     'set-position':       opSetPosition,
