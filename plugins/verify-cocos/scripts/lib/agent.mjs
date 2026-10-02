@@ -117,7 +117,9 @@ export async function runAgent({ game, adapter, mission: missionSpec, policy, rn
         const violation = await drain();
         return violation ? end('bug', violation) : end('pass');
       }
-      if (events.some((event) => event.type === 'gameOver')) return end('lose');
+      // Миссия может доиграть экран поражения (continueAfterGameOver) — тогда
+      // конец прогона решает её done.
+      if (!mission.continueAfterGameOver && events.some((event) => event.type === 'gameOver')) return end('lose');
       if (frame >= limits.maxFrames) return end('timeout');
       if (limits.stopAt != null && frame >= limits.stopAt) return end('stopped');
 

@@ -1,6 +1,7 @@
 // Игрушечная игра без браузера: точка на прямой идёт к цели.
-// Событие 'bump' — на каждой клетке, кратной 3; 'reached' — в цели.
-export function toyGame({ target = 5, errorsAfterStep = null } = {}) {
+// Событие 'bump' — на каждой клетке, кратной 3; 'reached' — в цели;
+// 'gameOver' — на клетке gameOverAt, если задана.
+export function toyGame({ target = 5, errorsAfterStep = null, gameOverAt = null } = {}) {
   let x = 0; let dir = 0; let steps = 0;
   return {
     get x() { return x; },
@@ -14,6 +15,7 @@ export function toyGame({ target = 5, errorsAfterStep = null } = {}) {
         const events = [];
         if (dir !== 0 && x % 3 === 0) events.push({ type: 'bump', x });
         if (x === target) events.push({ type: 'reached' });
+        if (x === gameOverAt) events.push({ type: 'gameOver' });
         if (events.length) return { frames: i, events };
       }
       return { frames: n, events: [] };

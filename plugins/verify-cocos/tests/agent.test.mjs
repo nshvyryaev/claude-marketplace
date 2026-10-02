@@ -252,3 +252,15 @@ test('досмотр ожиданий не выходит за stopAt и maxFram
   const capped = await run({ adapter, limits: { drainFrames: 120, maxFrames: 9, stallFrames: 1000 } });
   assert.ok(capped.result.frame <= 9, `кадр ${capped.result.frame}`);
 });
+
+test('поражение кончает прогон вердиктом lose, если миссия не доигрывает его', async () => {
+  const { result } = await run({ game: toyGame({ target: 6, gameOverAt: 3 }) });
+  assert.equal(result.verdict, 'lose');
+});
+
+test('миссия с continueAfterGameOver доигрывает после поражения', async () => {
+  const adapter = toyAdapter();
+  adapter.missions.reach = { continueAfterGameOver: true, done: (m) => m.x === m.target };
+  const { result } = await run({ game: toyGame({ target: 6, gameOverAt: 3 }), adapter });
+  assert.equal(result.verdict, 'pass');
+});
