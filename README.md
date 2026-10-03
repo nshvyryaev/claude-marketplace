@@ -18,6 +18,7 @@ Personal Claude Code plugins.
 | [acceptance](plugins/acceptance/) | Acceptance criteria as a first-class artefact: lifecycle, freeze hook, sign-off rules. |
 | [verify-web](plugins/verify-web/) | Browser verification over raw CDP: scenarios, snapshot diffs, screenshots for visual judgement. |
 | [verify-cocos](plugins/verify-cocos/) | Game-playing QA bot for Cocos Creator web builds: seeded deterministic runs, goal/tactic agent with configurable randomness, oracles, decision trace, replay. |
+| [project-toolkit](plugins/project-toolkit/) | Global skill: map of the shared tooling every project uses — acceptance, verify-web, analytics-kit, ab-kit, and deployment through the `E:projectsinfra` hosting registry. Enabled user-wide. |
 | [pre-use-allow](plugins/pre-use-allow/) | PreToolUse Bash auto-approval. The parser and hook ship with the plugin (so security fixes propagate); a project owns only its `patterns.js`. Includes observed-history promotion to grow the whitelist over time. |
 
 ## Install a plugin
