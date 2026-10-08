@@ -12,6 +12,8 @@ const TYPES = {
   '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.txt': 'text/plain; charset=utf-8',
 };
 
+export const BLANK_PATH = '/__verify-cocos__/blank.html';
+
 // Файл сборки по пути запроса: { status, headers, body }. Тот же ответ отдают
 // и сервер, и подмена запросов сборки в прогоне без сети (session.mjs).
 export async function buildResponse(root, url) {
@@ -21,6 +23,9 @@ export async function buildResponse(root, url) {
   } catch {
     return { status: 400, headers: {}, body: null };
   }
+  // Пустая страница источника сборки: на ней плагин заполняет хранилище
+  // (localStorage, Cache API) до загрузки игры.
+  if (rel === BLANK_PATH) return { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, body: Buffer.from('<!doctype html><title>verify-cocos</title>') };
   if (rel.endsWith('/')) rel += 'index.html';
   const file = path.resolve(root, `.${rel}`);
   if (file !== root && !file.startsWith(root + path.sep)) return { status: 403, headers: {}, body: null };

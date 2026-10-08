@@ -1,0 +1,1 @@
+{ "caches": { "file-cache": [ { "url": "/from-file.txt", "file": "db/players.sql", "headers": { "content-type": "text/plain" } } ] }, "localStorage": { "from": "file" } }

@@ -1,8 +1,10 @@
-// Окружение прогона: параметры URL, часы, часовой пояс, сеть, размер окна.
+// Окружение прогона: параметры URL, часы, часовой пояс, сеть, размер окна,
+// сервер API, подмена ответов, хранилище до загрузки.
 //
 // Всё здесь — по выбору прогона: поле не задано — плагин ведёт себя как
 // раньше. Те же нормализации служат операциям моста посреди прогона
-// (`network`, `viewport`, `clock`, `reload` из act()).
+// (`network`, `viewport`, `clock`, `reload`, `intercept` из act()).
+import { serverSpec } from './server.mjs';
 
 // Ошибка в поле прогона или операции моста — ошибка проекта, а не игры.
 function fault(message) {
@@ -78,9 +80,71 @@ export function timezoneId(timezone) {
   return timezone;
 }
 
+// Параметр к готовой строке query: адрес сервера прогона (`?api=…`) поверх
+// параметров прогона; одноимённый параметр прогона заменяется.
+export function withParam(query, key, value) {
+  const params = new URLSearchParams(query.replace(/^\?/, ''));
+  params.delete(key);
+  const rest = params.toString().replace(/=(?=&|$)/g, '');
+  const own = `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+  return `?${rest ? `${rest}&` : ''}${own}`;
+}
+
+// `intercept`: подмена ответов (B-2) — CDP Fetch.requestPaused. Правило:
+// { url: '*/v1/runs*' (шаблон Fetch: * и ?), delay?: мс, fail?: true|'refused'|
+// 'timeout'|'reset'|'unreachable', status?: код, body?: строка }. delay — запрос
+// уходит позже; fail — адрес недостижим; status — ответ без сервера.
+export const FAIL_REASONS = { refused: 'ConnectionRefused', timeout: 'TimedOut', reset: 'ConnectionReset', unreachable: 'AddressUnreachable' };
+
+const globRe = (glob) => new RegExp(`^${glob.split('').map((c) => (c === '*' ? '.*' : c === '?' ? '.' : c.replace(/[.+^${}()|[\]\\]/g, '\\$&'))).join('')}$`);
+
+export function interceptRules(rules) {
+  if (!Array.isArray(rules)) throw fault(`intercept: массив правил, а не ${JSON.stringify(rules)}`);
+  return rules.map((rule) => {
+    const where = `intercept ${JSON.stringify(rule)}`;
+    if (!rule || typeof rule !== 'object' || typeof rule.url !== 'string' || rule.url === '') throw fault(`${where}: нужен url-шаблон`);
+    if (rule.delay !== undefined && !(Number.isFinite(rule.delay) && rule.delay >= 0)) throw fault(`${where}: delay — мс ≥ 0`);
+    if (rule.fail !== undefined && rule.fail !== true && !Object.hasOwn(FAIL_REASONS, rule.fail)) throw fault(`${where}: fail — true или ${Object.keys(FAIL_REASONS).join('|')}`);
+    if (rule.status !== undefined && !(Number.isInteger(rule.status) && rule.status >= 200 && rule.status <= 599)) throw fault(`${where}: status — код 200–599`);
+    if (rule.fail !== undefined && rule.status !== undefined) throw fault(`${where}: fail и status вместе не бывают`);
+    if (rule.delay === undefined && rule.fail === undefined && rule.status === undefined) throw fault(`${where}: нужен delay, fail или status`);
+    if (rule.body !== undefined && typeof rule.body !== 'string') throw fault(`${where}: body — строка`);
+    return { ...rule, fail: rule.fail === true ? 'refused' : rule.fail, re: globRe(rule.url) };
+  });
+}
+
+// `storage` (B-3): хранилище страницы до загрузки игры — объект или путь к
+// JSON-файлу от корня проекта: { localStorage: { ключ: значение }, caches:
+// { "<кэш>": [ { url, body?, file?, status?, headers? } ] } }. Значение
+// localStorage не строка — JSON-строкой; {api} в url — адрес сервера прогона.
+export function storageSpec(spec) {
+  if (typeof spec === 'string' && spec !== '') return spec;
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw fault(`storage: объект или путь к JSON, а не ${JSON.stringify(spec)}`);
+  const extra = Object.keys(spec).filter((k) => k !== 'localStorage' && k !== 'caches');
+  if (extra.length) throw fault(`storage: неизвестные поля ${extra.join(', ')}`);
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  if (spec.localStorage !== undefined && !isObj(spec.localStorage)) throw fault('storage.localStorage: объект');
+  if (spec.caches !== undefined) {
+    if (!isObj(spec.caches)) throw fault('storage.caches: { "<кэш>": [записи] }');
+    for (const [name, entries] of Object.entries(spec.caches)) {
+      if (!Array.isArray(entries)) throw fault(`storage.caches.${name}: массив записей`);
+      for (const e of entries) {
+        if (!e || typeof e.url !== 'string' || e.url === '') throw fault(`storage.caches.${name}: у записи нужен url`);
+        const where = `storage.caches.${name} ${e.url}`;
+        if (e.body !== undefined && e.file !== undefined) throw fault(`${where}: body или file, не оба`);
+        if (e.body !== undefined && typeof e.body !== 'string') throw fault(`${where}: body — строка`);
+        if (e.file !== undefined && (typeof e.file !== 'string' || e.file === '')) throw fault(`${where}: file — путь от корня проекта`);
+        if (e.status !== undefined && !(Number.isInteger(e.status) && e.status >= 200 && e.status <= 599)) throw fault(`${where}: status 200–599`);
+        if (e.headers !== undefined && !(isObj(e.headers) && Object.values(e.headers).every((v) => typeof v === 'string'))) throw fault(`${where}: headers — объект строк`);
+      }
+    }
+  }
+  return spec;
+}
+
 // Поля прогона, которые читает сам плагин (а не мост). Проверяются при
 // загрузке прогонов, чтобы опечатка всплыла до запуска Chrome.
-export const ENV_FIELDS = ['query', 'clock', 'timezone', 'network', 'viewport'];
+export const ENV_FIELDS = ['query', 'clock', 'timezone', 'network', 'viewport', 'server', 'intercept', 'storage'];
 
 export function validateEnv(spec) {
   if (spec.query !== undefined) queryString(spec.query);
@@ -88,6 +152,9 @@ export function validateEnv(spec) {
   if (spec.timezone !== undefined) timezoneId(spec.timezone);
   if (spec.network !== undefined) { networkParams(spec.network); networkAt(spec.network); }
   if (spec.viewport !== undefined) viewportParams(spec.viewport ?? {});
+  if (spec.server !== undefined && spec.server !== false && spec.server !== null) serverSpec(spec.server);
+  if (spec.intercept !== undefined) interceptRules(spec.intercept);
+  if (spec.storage !== undefined) storageSpec(spec.storage);
 }
 
 export function pickEnv(spec) {
