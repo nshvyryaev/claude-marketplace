@@ -13,7 +13,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { launchChrome } from '../vendor/cdp/chrome.mjs';
 import { connect } from '../vendor/cdp/cdp.mjs';
-import { serveDir } from './serve.mjs';
+import { serveDir, buildResponse } from './serve.mjs';
 import { shimSource } from './shim.mjs';
 import { viewSource } from './view.mjs';
 import { dispatchOps } from './keys.mjs';
@@ -159,10 +159,32 @@ export async function openSession({ root, config, seed, run = {}, env = {} }) {
     await call('window.__botShim.realFrame()', 'realFrame');
   };
 
+  // Сборка — часть игры, а не сеть: «нет сети» прогона отрезает всё, кроме неё
+  // (сервер API, CDN, аналитику). Иначе лениво грузимые файлы сборки (сцены,
+  // картинки resources) падали бы, хотя на устройстве они уже есть. Запросы к
+  // серверу сборки отвечаются с диска через Fetch, мимо эмуляции сети.
+  const serveBuild = async () => {
+    cdp.on('Fetch.requestPaused', ({ requestId, request }) => {
+      buildResponse(server.root, request.url.slice(server.url.length - 1))
+        .then(({ status, headers, body }) => cdp.send('Fetch.fulfillRequest', {
+          requestId,
+          responseCode: status,
+          responseHeaders: Object.entries(headers).map(([name, value]) => ({ name, value })),
+          body: body ? body.toString('base64') : '',
+        }))
+        .catch(() => cdp.send('Fetch.continueRequest', { requestId }).catch(() => {}));
+    });
+    await cdp.send('Fetch.enable', { patterns: [{ urlPattern: `${server.url}*`, requestStage: 'Request' }] });
+  };
+
   let networkEnabled = false;
   const applyNetwork = async (params) => {
     // Без домена Network условия сети на запросы страницы не действуют.
-    if (!networkEnabled) { await cdp.send('Network.enable'); networkEnabled = true; }
+    if (!networkEnabled) {
+      await serveBuild();
+      await cdp.send('Network.enable');
+      networkEnabled = true;
+    }
     await cdp.send('Network.emulateNetworkConditions', params);
     await settle(`navigator.onLine === ${!params.offline}`, 'network');
   };

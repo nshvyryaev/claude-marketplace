@@ -31,6 +31,8 @@ test('раздаёт index.html на / и типы по расширению', a
     const js = await fetch(`${server.url}app.js`);
     assert.match(js.headers.get('content-type'), /javascript/);
     assert.equal((await fetch(`${server.url}nope.js`)).status, 404);
+    // Иконку вкладки Chrome просит сам — без файла 204, а не 404 в журнале ошибок.
+    assert.equal((await fetch(`${server.url}favicon.ico`)).status, 204);
   } finally { await server.close(); }
 });
 

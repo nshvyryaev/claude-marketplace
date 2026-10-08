@@ -1,6 +1,6 @@
 {
   "name": "verify-cocos",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Game-playing QA bot for Cocos Creator web builds: deterministic runs by seed, goal/tactic agent with configurable randomness, oracles, decision trace and replay",
   "author": {
     "name": "Nikita Shvyryaev",

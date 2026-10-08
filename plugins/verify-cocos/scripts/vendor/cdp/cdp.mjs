@@ -27,6 +27,8 @@ export async function connect(port) {
   // Ошибки страницы копятся весь прогон: сценарий проверяет их в конце, а не
   // после каждого шага — иначе асинхронная ошибка проскочит между шагами.
   const errors = [];
+  // Подписки на события CDP по имени метода (Fetch.requestPaused и т. п.).
+  const listeners = new Map();
 
   // Закрытый сокет или упавшая страница отклоняют все ожидающие вызовы:
   // иначе промис ждал бы ответа, который уже не придёт, и прогон висел бы.
@@ -63,6 +65,10 @@ export async function connect(port) {
     if (message.method === 'Inspector.targetCrashed') {
       errors.push({ kind: 'crash', text: 'страница упала (Inspector.targetCrashed)' });
       failAll('страница упала');
+    }
+
+    if (message.method && listeners.has(message.method)) {
+      for (const fn of listeners.get(message.method)) fn(message.params);
     }
 
     if (message.id && pending.has(message.id)) {
@@ -116,6 +122,10 @@ export async function connect(port) {
     send,
     evaluate,
     errors,
+    on: (method, fn) => {
+      if (!listeners.has(method)) listeners.set(method, []);
+      listeners.get(method).push(fn);
+    },
     clearErrors: () => errors.splice(0, errors.length),
     close: () => {
       failAll('соединение с Chrome закрыто');

@@ -19,6 +19,10 @@
       onLine: navigator.onLine,
       offlineEvents,
       fetch: await fetch('index.html').then((r) => r.status, () => 'fail'),
+      // Не сборка (`probe` прогона — другой сервер): «нет сети» отрезает только его.
+      remote: window.__botRun && window.__botRun.probe
+        ? await fetch(window.__botRun.probe, { mode: 'no-cors', cache: 'no-store' }).then(() => 'ok', () => 'fail')
+        : null,
       size: [innerWidth, innerHeight],
       resizes,
       portrait: matchMedia('(orientation: portrait)').matches,

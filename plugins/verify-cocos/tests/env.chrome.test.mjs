@@ -2,6 +2,7 @@
 // перезапуск. Без Chrome — пропускается.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSession } from '../scripts/lib/session.mjs';
@@ -16,6 +17,15 @@ const config = {
   limits: { bootTimeoutMs: 20000, startFrames: 100, settleMs: 5 },
 };
 const open = (env = {}, run = {}) => openSession({ root, config, seed: 1, run, env });
+// Сервер «не сборки» для проверки сети: отвечает 200 на всё.
+async function probeServer() {
+  const server = http.createServer((req, res) => res.writeHead(200).end('ok'));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    url: `http://127.0.0.1:${server.address().port}/probe`,
+    close: () => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }),
+  };
+}
 const STEP = Math.ceil((1000 / 60) * 1024) / 1024;
 
 test('без полей окружения — прежняя страница: нет query, онлайн, размер конфига', { skip: !hasChrome }, async () => {
@@ -66,32 +76,39 @@ test('clock и timezone: Date.now и new Date() идут от часов про�
   } finally { await game.close(); }
 });
 
-test('network: нет сети посреди прогона и обратно, отказ запроса — не ошибка игры', { skip: !hasChrome }, async () => {
-  const game = await open();
+test('network: нет сети посреди прогона и обратно, отказ запроса — не ошибка игры; сборка доступна всегда', { skip: !hasChrome }, async () => {
+  const probe = await probeServer();
+  const game = await open({}, { probe: probe.url });
   try {
     await game.start({});
+    assert.equal((await game.observe()).remote, 'ok');
     await game.act({ ops: [{ type: 'network', offline: true }] });
     let seen = await game.observe();
     assert.equal(seen.onLine, false);
     assert.equal(seen.offlineEvents, 1);
-    assert.equal(seen.fetch, 'fail');
+    assert.equal(seen.remote, 'fail');
+    // Файлы сборки — часть игры, а не сеть: лениво грузимое не падает.
+    assert.equal(seen.fetch, 200);
     assert.deepEqual(game.errors(), []);
     await game.act({ ops: [{ type: 'network' }] });
     seen = await game.observe();
     assert.equal(seen.onLine, true);
     assert.equal(seen.fetch, 200);
+    assert.equal(seen.remote, 'ok');
     await assert.rejects(game.act({ ops: [{ type: 'network', offline: 'yes' }] }), (e) => e.adapterFault === true);
-  } finally { await game.close(); }
+  } finally { await game.close(); await probe.close(); }
 });
 
-test('network прогона: at boot — без сети с самого старта уровня', { skip: !hasChrome }, async () => {
-  const game = await open({ network: 'offline' });
+test('network прогона: at boot — без сети с самого старта уровня, сборка грузится', { skip: !hasChrome }, async () => {
+  const probe = await probeServer();
+  const game = await open({ network: 'offline' }, { probe: probe.url });
   try {
     await game.start({});
     const seen = await game.observe();
     assert.equal(seen.onLine, false);
-    assert.equal(seen.fetch, 'fail');
-  } finally { await game.close(); }
+    assert.equal(seen.remote, 'fail');
+    assert.equal(seen.fetch, 200);
+  } finally { await game.close(); await probe.close(); }
 });
 
 test('viewport: портрет телефона и обратно', { skip: !hasChrome }, async () => {
