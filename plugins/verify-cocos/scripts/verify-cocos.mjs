@@ -24,6 +24,7 @@ import { executeRun, runEnv, mapPool } from './lib/execute.mjs';
 import { openSession } from './lib/session.mjs';
 import { readTraceLines } from './lib/trace.mjs';
 import { parsePattern, policySlug } from './lib/policy.mjs';
+import { pickEnv } from './lib/env.mjs';
 import { zonesForFiles, selectScenarios } from './vendor/cdp/zones.mjs';
 import {
   runOk, formatRunLine, summarizeSoak, formatSoakSummary,
@@ -138,7 +139,7 @@ async function commandReplay() {
   }
   const stopAt = args.values.until != null ? Number(args.values.until) : null;
   const outDir = path.join(dir, `replay-${stamp()}`);
-  const spec = { name: start.name, level: start.level, seed: start.seed, mission: start.mission, policy: start.policy, theme: start.theme ?? null, touch: !!start.touch, bridge: start.bridge ?? null };
+  const spec = { name: start.name, level: start.level, seed: start.seed, mission: start.mission, policy: start.policy, theme: start.theme ?? null, touch: !!start.touch, bridge: start.bridge ?? null, ...pickEnv(start) };
   const result = await executeRun({ root, config, adapter, hash, spec, outDir, stopAt });
   log(formatRunLine(result));
   const replayed = await readTraceLines(path.join(outDir, 'trace.jsonl'));

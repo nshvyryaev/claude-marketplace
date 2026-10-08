@@ -11,6 +11,7 @@ import { buildFingerprint } from './project.mjs';
 import { safeSummary } from './report.mjs';
 import { compareShot, pruneBaselines } from './baseline.mjs';
 import { unmetRequires } from './checks.mjs';
+import { pickEnv } from './env.mjs';
 
 const PLUGIN_JSON = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude-plugin', 'plugin.json');
 
@@ -29,6 +30,9 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
   const trace = createTrace();
   trace.write({
     f: 0, t: 'start', name: spec.name, seed: spec.seed, level: spec.level, theme: spec.theme ?? null, touch: !!spec.touch, bridge: spec.bridge ?? null,
+    // Окружение прогона (query, clock, …) — только заданные поля: журналы
+    // прогонов без них не меняются.
+    ...pickEnv(spec),
     mission, policy: spec.policy, adapter: hash, env,
   });
 
@@ -66,7 +70,7 @@ export async function executeRun({ root, config, adapter, hash, spec, outDir, st
     return { outcome: r.outcome === 'updated' ? 'match' : r.outcome };
   };
   try {
-    game = await openSession({ root, config, seed: spec.seed, run: { ...(spec.bridge ?? {}), theme: spec.theme ?? null, touch: !!spec.touch } });
+    game = await openSession({ root, config, seed: spec.seed, run: { ...(spec.bridge ?? {}), theme: spec.theme ?? null, touch: !!spec.touch }, env: pickEnv(spec) });
     await game.start({ level: spec.level });
     const rng = mulberry32(botSeed(spec.seed));
     result = await runAgent({

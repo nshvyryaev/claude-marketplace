@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parsePattern } from './policy.mjs';
+import { validateEnv } from './env.mjs';
 
 export const DEFAULTS = {
   build: 'build/web-mobile',
@@ -93,6 +94,8 @@ export async function loadRuns(root, config) {
     for (const part of parts) {
       try { parsePattern(part ?? 'planned'); } catch (error) { throw new Error(`Прогон ${file}: ${error.message}`); }
     }
+    // Окружение прогона (query, clock, timezone, network, viewport) — до Chrome.
+    try { validateEnv(run); } catch (error) { throw new Error(`Прогон ${file}: ${error.message}`); }
     const mission = typeof run.mission === 'string'
       ? { name: run.mission, params: {} }
       : (({ name, ...params }) => ({ name, params }))(run.mission);

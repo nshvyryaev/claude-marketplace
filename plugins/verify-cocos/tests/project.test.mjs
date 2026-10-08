@@ -41,6 +41,17 @@ test('прогон с опечаткой в политике отклоняет�
   await assert.rejects(loadRuns(root, await loadConfig(root)), /evry:2/);
 });
 
+test('окружение прогона проверяется до запуска и доходит до прогона', async () => {
+  const root = await project();
+  const base = { zone: 'z', level: 0, seed: 1, mission: 'm', expect: { verdict: 'pass' } };
+  await writeFile(path.join(root, 'verify', 'runs', 'c.json'), JSON.stringify({ ...base, clock: 'вчера' }));
+  await assert.rejects(loadRuns(root, await loadConfig(root)), /c\.json.*clock/);
+  const env = { query: { prod: true }, clock: '2026-03-01T00:00:00Z', timezone: 'UTC', network: { offline: true, at: 'ready' }, viewport: { width: 390, height: 844, mobile: true } };
+  await writeFile(path.join(root, 'verify', 'runs', 'c.json'), JSON.stringify({ ...base, ...env }));
+  const [run] = await loadRuns(root, await loadConfig(root));
+  for (const [key, value] of Object.entries(env)) assert.deepEqual(run[key], value);
+});
+
 test('хэш адаптера меняется при правке модуля', async () => {
   const root = await project();
   const config = await loadConfig(root);

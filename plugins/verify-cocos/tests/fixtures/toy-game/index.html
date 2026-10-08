@@ -1,5 +1,5 @@
 <!doctype html>
-<html><body><canvas id="GameCanvas" tabindex="99" width="64" height="64"></canvas><script>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><canvas id="GameCanvas" tabindex="99" width="64" height="64"></canvas><script>
   // Игрушка: x растёт, пока зажата стрелка вправо; target — из Math.random.
   // Клавиши слушает канвас, как Cocos: без фокуса на нём ввод не доходит.
   const toy = { x: 0, dir: null, frame: 0, t: 0, target: Math.floor(Math.random() * 1000) };
