@@ -1,6 +1,6 @@
 {
   "name": "project-toolkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Map of the shared tooling every project can use: acceptance criteria, browser verification, analytics-kit, ab-kit experiments, and deployment through the single hosting registry",
   "author": {
     "name": "Nikita Shvyryaev",
