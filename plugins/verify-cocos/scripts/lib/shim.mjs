@@ -20,6 +20,12 @@
 // При шаге ровно 1000/60 Pacer Cocos видел часть интервалов на ULP короче
 // кадра и пропускал их, а dt дрожал в младших битах — прогоны с одним seed
 // расходились (см. результаты спайка в спеке).
+//
+// Часы прогона (cfg.clock, мс эпохи; по выбору прогона): до заморозки Date
+// стоит на cfg.clock, после — идёт от него с виртуальным временем кадров.
+// В этом режиме подменяется и конструктор Date: new Date() без аргументов
+// тоже видит часы прогона. Без cfg.clock Date.now — прежняя эпоха шима, а
+// new Date() — настоящее время (как было до часов прогона).
 
 function shimMain(cfg) {
   const makeRng = (seed) => {
@@ -42,13 +48,35 @@ function shimMain(cfg) {
   let base = 0;
   let frames = 0;
   let now = 0;
+  let frozen = false;
   performance.now = () => now;
-  Date.now = () => EPOCH_MS + Math.floor(now);
+
+  let clockBase = null;
+  const elapsed = () => (frozen ? Math.floor(frames * frameMs) : 0);
+  const wallNow = () => (clockBase === null ? EPOCH_MS + Math.floor(now) : clockBase + elapsed());
+  Date.now = wallNow;
+  const RealDate = Date;
+  const setClock = (ms) => {
+    if (clockBase === null) {
+      // Конструктор подменяется при первом включении часов: instanceof и
+      // прототип — настоящие, Date() без new — строка, как в браузере.
+      const BotDate = function BotDate(...args) {
+        if (!new.target) return new RealDate(wallNow()).toString();
+        return args.length === 0 ? new RealDate(wallNow()) : new RealDate(...args);
+      };
+      BotDate.prototype = RealDate.prototype;
+      BotDate.now = wallNow;
+      BotDate.parse = RealDate.parse;
+      BotDate.UTC = RealDate.UTC;
+      window.Date = BotDate;
+    }
+    clockBase = ms - elapsed();
+  };
+  if (cfg.clock != null) setClock(cfg.clock);
 
   const realRaf = window.requestAnimationFrame.bind(window);
   let queue = [];
   let nextId = 1;
-  let frozen = false;
 
   window.requestAnimationFrame = (cb) => {
     const id = nextId++;
@@ -104,9 +132,15 @@ function shimMain(cfg) {
     },
     frames: () => frames,
     now: () => now,
+    // Часы прогона: Date.now() страницы становится ms с этого момента.
+    setClock,
+    wallNow,
+    // Настоящий кадр браузера: к нему события resize и online/offline уже
+    // разосланы — плагин ждёт его после смены окружения посреди прогона.
+    realFrame: () => new Promise((resolve) => realRaf(() => resolve(true))),
   };
 }
 
-export function shimSource({ seed, fps }) {
-  return `(${shimMain.toString()})(${JSON.stringify({ seed: seed >>> 0, fps })});`;
+export function shimSource({ seed, fps, clock = null }) {
+  return `(${shimMain.toString()})(${JSON.stringify({ seed: seed >>> 0, fps, clock })});`;
 }

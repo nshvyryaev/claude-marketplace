@@ -79,3 +79,29 @@ test('исключение в колбэке rAF не останавливает
   assert.equal(reported.length, 1);
   assert.match(reported[0].message, /игра упала/);
 });
+
+test('без часов прогона Date.now — прежняя эпоха шима, конструктор Date настоящий', () => {
+  const { run } = page();
+  assert.equal(run('Date.now()'), 1767225600000);
+  assert.equal(run('Date.name'), 'Date');
+});
+
+test('часы прогона: стоят до заморозки, потом идут с кадрами; new Date() их видит', () => {
+  const ctx = { requestAnimationFrame: () => 1, performance: {}, reportError: () => {} };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(shimSource({ seed: 1, fps: 60, clock: 1800000000000 }), ctx);
+  const run = (code) => vm.runInContext(code, ctx);
+  assert.equal(run('Date.now()'), 1800000000000);
+  run('__botShim.freeze(); __botShim.step(60)');
+  const step = Math.ceil((1000 / 60) * 1024) / 1024;
+  assert.equal(run('Date.now()'), 1800000000000 + Math.floor(60 * step));
+  assert.equal(run('new Date().getTime()'), run('Date.now()'));
+  assert.equal(run('new Date(5).getTime()'), 5);
+  assert.equal(run('new Date() instanceof Date'), true);
+  assert.equal(run('typeof Date()'), 'string');
+  run('__botShim.setClock(1900000000000)');
+  assert.equal(run('Date.now()'), 1900000000000);
+  run('__botShim.step(1)');
+  assert.equal(run('Date.now()'), 1900000000000 + Math.floor(61 * step) - Math.floor(60 * step));
+});
