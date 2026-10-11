@@ -90,7 +90,7 @@ verify/
 |---|---|
 | `node(path)` | `{ active, worldRect: { x, y, w, h }, opacity, color, children }` или `null`; путь от корня сцены через `/`; `opacity` — с учётом `UIOpacity` предков |
 | `find(className)` | `[{ path, active, worldRect, opacity }]` для всех узлов с компонентом |
-| `pageRect(worldRect)` | CSS px страницы — по узлу `Canvas` и элементу `#GameCanvas` |
+| `pageRect(worldRect)` | CSS px страницы — по узлу `Canvas` и элементу `#GameCanvas`; масштаб по осям одинаковый, видимая область по центру элемента — режим «весь кадр» (Show All) с полями учитывается |
 
 Мост решает, какие факты вида положить в `observe().view`; раскладка узлов по
 темам — таблица в мосте. Параметры прогона (`theme` и др.) — в

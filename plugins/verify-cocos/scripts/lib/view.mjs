@@ -2,14 +2,19 @@
 //
 // Внедряется в страницу после shim и до моста. К движку обращается лениво, в
 // момент вызова: при внедрении его ещё нет.
+//
+// Канвас Cocos — видимая область; в режиме «весь кадр» (Show All: fitWidth +
+// fitHeight) она меньше элемента и стоит по центру с полями, масштаб по осям
+// одинаковый. Без полей (fitHeight / fitWidth) формула даёт прежний результат.
 export function mapRect(rect, canvasWorld, element) {
-  const sx = element.width / canvasWorld.w;
-  const sy = element.height / canvasWorld.h;
+  const s = Math.min(element.width / canvasWorld.w, element.height / canvasWorld.h);
+  const left = element.left + (element.width - canvasWorld.w * s) / 2;
+  const top = element.top + (element.height - canvasWorld.h * s) / 2;
   return {
-    x: element.left + (rect.x - canvasWorld.x) * sx,
-    y: element.top + (canvasWorld.y + canvasWorld.h - (rect.y + rect.h)) * sy,
-    width: rect.w * sx,
-    height: rect.h * sy,
+    x: left + (rect.x - canvasWorld.x) * s,
+    y: top + (canvasWorld.y + canvasWorld.h - (rect.y + rect.h)) * s,
+    width: rect.w * s,
+    height: rect.h * s,
   };
 }
 
@@ -22,6 +27,19 @@ function viewMain(mapRectFn) {
     if (!ut) return null;
     const b = ut.getBoundingBoxToWorld();
     return { x: b.x, y: b.y, w: b.width, h: b.height };
+  }
+
+  // Прямоугольник самого узла, без детей: getBoundingBoxToWorld объединяет
+  // рамки детей, и узел за краем кадра (игрок на нижней кромке) растягивал бы
+  // канвас — перевод в CSS px поехал бы.
+  function ownRect(node) {
+    const ut = node.getComponent(cls('cc.UITransform'));
+    if (!ut) return null;
+    const p = node.worldPosition;
+    const sc = node.worldScale;
+    const w = ut.contentSize.width * sc.x;
+    const h = ut.contentSize.height * sc.y;
+    return { x: p.x - ut.anchorPoint.x * w, y: p.y - ut.anchorPoint.y * h, w, h };
   }
 
   function opacity(node) {
@@ -65,7 +83,7 @@ function viewMain(mapRectFn) {
     },
     pageRect(rect) {
       const canvasNode = scene().getChildByName('Canvas');
-      const canvasWorld = worldRect(canvasNode);
+      const canvasWorld = ownRect(canvasNode);
       const element = document.getElementById('GameCanvas').getBoundingClientRect();
       return mapRectFn(rect, canvasWorld, element);
     },
