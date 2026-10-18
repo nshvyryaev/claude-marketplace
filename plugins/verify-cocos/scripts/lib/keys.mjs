@@ -31,6 +31,28 @@ export function keyEvents(op) {
   throw adapterFault(`Неизвестный тип ввода в действии моста: ${op.type}`);
 }
 
+// Печать текста: по символу keyDown с `text` (браузер вставляет символ в поле в фокусе и шлёт
+// keydown / keypress / input — как настоящая клавиатура) и keyUp. Буквы латиницы и цифры — с кодом
+// клавиши, пробел — Space; прочие символы (кириллица) — без кода, только `key` и `text`.
+export function textEvents(op) {
+  if (typeof op?.text !== 'string' || op.text.length === 0) {
+    throw adapterFault(`Печать без текста в действии моста: ${JSON.stringify(op)}`);
+  }
+  const out = [];
+  for (const ch of op.text) {
+    const up = ch.toUpperCase();
+    let code = '';
+    let keyCode = 0;
+    if (ch === ' ') { code = 'Space'; keyCode = 32; }
+    else if (/^[A-Z]$/.test(up)) { code = `Key${up}`; keyCode = up.charCodeAt(0); }
+    else if (/^[0-9]$/.test(ch)) { code = `Digit${ch}`; keyCode = ch.charCodeAt(0); }
+    const base = { key: ch, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
+    out.push({ type: 'keyDown', ...base, text: ch, unmodifiedText: ch });
+    out.push({ type: 'keyUp', ...base });
+  }
+  return out;
+}
+
 // Касание одним пальцем: x, y — CSS px страницы. touchEnd без точек — палец
 // поднят. Игра видит касания, только если прогон включил эмуляцию тача
 // (`touch: true`): Cocos подписывается на них по признаку при загрузке.
@@ -46,6 +68,10 @@ export function touchEvent(op) {
 
 export async function dispatchOps(cdp, ops) {
   for (const op of ops) {
+    if (op?.type === 'text') {
+      for (const event of textEvents(op)) await cdp.send('Input.dispatchKeyEvent', event);
+      continue;
+    }
     if (TOUCH.has(op?.type)) {
       await cdp.send('Input.dispatchTouchEvent', touchEvent(op));
       continue;

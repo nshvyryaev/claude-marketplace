@@ -142,9 +142,19 @@ export function storageSpec(spec) {
   return spec;
 }
 
+// Ожидаемые ошибки журнала Chrome: подстроки текста. Настоящий ответ 4xx сервера прогона (отказ, который
+// судит проверка проекта) Chrome пишет ошибкой «Failed to load resource»: прогон, которому он нужен,
+// перечисляет его, и такая строка — не `console-error`.
+export function expectErrorsSpec(spec) {
+  if (!Array.isArray(spec) || spec.some((s) => typeof s !== 'string' || s === '')) {
+    throw fault(`expectErrors: список непустых строк, а не ${JSON.stringify(spec)}`);
+  }
+  return spec;
+}
+
 // Поля прогона, которые читает сам плагин (а не мост). Проверяются при
 // загрузке прогонов, чтобы опечатка всплыла до запуска Chrome.
-export const ENV_FIELDS = ['query', 'clock', 'timezone', 'network', 'viewport', 'server', 'intercept', 'storage'];
+export const ENV_FIELDS = ['query', 'clock', 'timezone', 'network', 'viewport', 'server', 'intercept', 'storage', 'expectErrors'];
 
 export function validateEnv(spec) {
   if (spec.query !== undefined) queryString(spec.query);
@@ -155,6 +165,7 @@ export function validateEnv(spec) {
   if (spec.server !== undefined && spec.server !== false && spec.server !== null) serverSpec(spec.server);
   if (spec.intercept !== undefined) interceptRules(spec.intercept);
   if (spec.storage !== undefined) storageSpec(spec.storage);
+  if (spec.expectErrors !== undefined) expectErrorsSpec(spec.expectErrors);
 }
 
 export function pickEnv(spec) {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { keyEvents, touchEvent, dispatchOps } from '../scripts/lib/keys.mjs';
+import { keyEvents, textEvents, touchEvent, dispatchOps } from '../scripts/lib/keys.mjs';
 
 test('press — нажатие и отпускание с кодом клавиши', () => {
   const events = keyEvents({ type: 'press', key: 'ArrowUp' });
@@ -50,4 +50,27 @@ test('dispatchOps шлёт касания и клавиши вперемешку
     ['Input.dispatchTouchEvent', 'touchStart'], ['Input.dispatchKeyEvent', 'keyDown'],
     ['Input.dispatchKeyEvent', 'keyUp'], ['Input.dispatchTouchEvent', 'touchEnd'],
   ]);
+});
+
+test('text — по символу keyDown с text и keyUp; латиница, цифры, пробел — с кодом, кириллица — без', () => {
+  const events = textEvents({ type: 'text', text: 'Qw 7Я' });
+  assert.deepEqual(events.map((e) => [e.type, e.key, e.text ?? null, e.code]), [
+    ['keyDown', 'Q', 'Q', 'KeyQ'], ['keyUp', 'Q', null, 'KeyQ'],
+    ['keyDown', 'w', 'w', 'KeyW'], ['keyUp', 'w', null, 'KeyW'],
+    ['keyDown', ' ', ' ', 'Space'], ['keyUp', ' ', null, 'Space'],
+    ['keyDown', '7', '7', 'Digit7'], ['keyUp', '7', null, 'Digit7'],
+    ['keyDown', 'Я', 'Я', ''], ['keyUp', 'Я', null, ''],
+  ]);
+  assert.equal(events[0].windowsVirtualKeyCode, 81);
+  assert.equal(events[2].windowsVirtualKeyCode, 87);
+});
+
+test('text без текста — ошибка адаптера', () => {
+  try { textEvents({ type: 'text', text: '' }); assert.fail('не бросило'); } catch (error) { assert.equal(error.adapterFault, true); }
+});
+
+test('dispatchOps печатает text по символам', async () => {
+  const sent = [];
+  await dispatchOps({ send: async (method, params) => sent.push([params.type, params.key]) }, [{ type: 'text', text: 'ab' }]);
+  assert.deepEqual(sent, [['keyDown', 'a'], ['keyUp', 'a'], ['keyDown', 'b'], ['keyUp', 'b']]);
 });

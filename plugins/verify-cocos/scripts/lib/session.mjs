@@ -125,6 +125,8 @@ export async function openSession({ root, config, seed, run = {}, env = {} }) {
   let rules = [];
   const ruleFailures = new Set();
   const ruleStatuses = new Set();
+  // Ожидаемые ошибки журнала Chrome (`expectErrors` прогона): подстроки текста.
+  const expectedErrors = env.expectErrors ?? [];
   // Адрес сервера прогона дописывается к любым параметрам страницы.
   const pageQuery = (q) => (api ? withParam(q, api.param, api.origin) : q);
 
@@ -397,8 +399,11 @@ export async function openSession({ root, config, seed, run = {}, env = {} }) {
           focus = true;
           continue;
         }
-        if (focus) await call(`document.getElementById('GameCanvas')?.focus(); true`, 'focus');
-        focus = false;
+        // Печать идёт в поле, которое игра держит в фокусе (окно ввода): холст фокус не забирает.
+        if (op?.type !== 'text') {
+          if (focus) await call(`document.getElementById('GameCanvas')?.focus(); true`, 'focus');
+          focus = false;
+        }
         await dispatchOps(cdp, [op]);
       }
       return ops;
@@ -408,9 +413,11 @@ export async function openSession({ root, config, seed, run = {}, env = {} }) {
     // это условие прогона, а не баг игры. Как игра переживает отказ, судят
     // проверки проекта.
     // То же для отказов и кодов, которые дала подмена ответов (intercept).
+    // И ошибки, которые прогон перечислил в `expectErrors` (настоящий 4xx сервера прогона).
     errors: () => cdp.errors
       .filter((e) => !(wentOffline && e.kind === 'log' && e.text.includes('ERR_INTERNET_DISCONNECTED')))
       .filter((e) => !(e.kind === 'log' && interceptLog(e.text)))
+      .filter((e) => !(e.kind === 'log' && expectedErrors.some((x) => e.text.includes(x))))
       .map((e) => ({ ...e, text: normalizeOrigin(e.text, server.url) })),
     async shot(region) {
       // Неверный region проекта — ошибка адаптера, а не страницы: иначе он ушёл

@@ -71,7 +71,7 @@ verify/
 | `ready()` | уровень готов принимать ввод |
 | `observe()` | полное состояние, JSON (`game` + `view`) |
 | `actions()` | доступные действия |
-| `act(action)` | список операций ввода `[{ type: 'keyDown'|'keyUp'|'press', key }]` и `[{ type: 'touchStart'|'touchMove', x, y }, { type: 'touchEnd' }]` (CSS px страницы) — их исполняет плагин через CDP; плюс операции окружения `network`, `viewport`, `clock`, `reload`, `intercept` (см. «Окружение прогона») |
+| `act(action)` | список операций ввода `[{ type: 'keyDown'|'keyUp'|'press', key }]`, печать `{ type: 'text', text }` (по символу `keyDown` с `text` и `keyUp`, в поле, которое игра держит в фокусе: холст перед печатью фокус не забирает) и `[{ type: 'touchStart'|'touchMove', x, y }, { type: 'touchEnd' }]` (CSS px страницы) — их исполняет плагин через CDP; плюс операции окружения `network`, `viewport`, `clock`, `reload`, `intercept` (см. «Окружение прогона») |
 | `frameEvents()` | события за последний кадр; вызывается shim'ом после каждого кадра |
 
 Клавиши: `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `Space`, `Enter`, `Escape`.
@@ -176,6 +176,7 @@ verify/
 | `server` | сервер API прогона: `true` или `{ "db": "<фикстура .sql | .json>", "env": { … } }` — см. «Сервер прогона» |
 | `intercept` | подмена ответов через CDP `Fetch.requestPaused`: `[{ "url": "*/v1/runs*", "delay": мс }, { "url": …, "fail": true | "refused" | "timeout" | "reset" | "unreachable" }, { "url": …, "status": 503, "body": "…" }]`. `url` — шаблон Fetch (`*`, `?`), первое подходящее правило решает. `delay` — запрос уходит позже на настоящие мс (с `fail`/`status` — задержка перед ними); `fail` — адрес недостижим; `status` — ответ без сервера (с CORS `*`, предзапрос `OPTIONS` отвечается 204). Уживается с «нет сети»: файлы сборки по-прежнему с диска. Отказы и коды, которые дала подмена, в журнале Chrome — не `console-error` |
 | `storage` | хранилище до загрузки игры: объект или путь к JSON от корня проекта — `{ "localStorage": { ключ: значение }, "caches": { "<кэш>": [{ "url", "body" | "file", "status", "headers" }] } }`. Значение не строка — JSON-строкой; `file` — файл проекта (бинарный тоже); `{api}` в `url` — адрес сервера прогона. Плагин открывает пустую страницу источника сборки (`/__verify-cocos__/blank.html`, без шима и моста), заполняет `localStorage` и Cache API и только потом грузит игру. Перезапуск (`reload`) хранилище не трогает |
+| `expectErrors` | ожидаемые ошибки журнала Chrome — подстроки текста: `["status of 422"]`. Настоящий ответ 4xx сервера прогона (отказ, который судит проверка проекта) Chrome пишет ошибкой «Failed to load resource»; перечисленная строка — не `console-error` |
 
 **Посреди прогона** окружение меняет мост: `act()` возвращает вперемешку с
 вводом операции, плагин исполняет их по порядку.

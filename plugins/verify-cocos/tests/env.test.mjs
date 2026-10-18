@@ -47,3 +47,11 @@ test('validateEnv и pickEnv: только заданные поля', () => {
   assert.throws(() => validateEnv({ timezone: '' }), fault);
   assert.deepEqual(pickEnv({ query: 'prod', clock: null, theme: 'x', network: 'offline' }), { query: 'prod', network: 'offline' });
 });
+
+test('expectErrors: список непустых строк, попадает в окружение прогона', () => {
+  validateEnv({ expectErrors: ['status of 422'] });
+  assert.throws(() => validateEnv({ expectErrors: 'status of 422' }), fault);
+  assert.throws(() => validateEnv({ expectErrors: [''] }), fault);
+  assert.throws(() => validateEnv({ expectErrors: [422] }), fault);
+  assert.deepEqual(pickEnv({ expectErrors: ['x'], theme: 'y' }), { expectErrors: ['x'] });
+});
