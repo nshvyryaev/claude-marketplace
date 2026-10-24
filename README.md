@@ -20,6 +20,7 @@ Personal Claude Code plugins.
 | [verify-cocos](plugins/verify-cocos/) | Game-playing QA bot for Cocos Creator web builds: seeded deterministic runs, goal/tactic agent with configurable randomness, oracles, decision trace, replay. |
 | [project-toolkit](plugins/project-toolkit/) | Global skills: map of the shared tooling every project uses, and how to send requests to the infra admin session — acceptance, verify-web, analytics-kit, ab-kit, and deployment through the `E:projectsinfra` hosting registry. Enabled user-wide. |
 | [pre-use-allow](plugins/pre-use-allow/) | PreToolUse Bash auto-approval. The parser and hook ship with the plugin (so security fixes propagate); a project owns only its `patterns.js`. Includes observed-history promotion to grow the whitelist over time. |
+| [nikita-writing-style](plugins/nikita-writing-style/) | Skill: Nikita's business writing style for MR threads, Jira and chats. Loaded only on an explicit request. |
 
 ## Install a plugin
 

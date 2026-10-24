@@ -37,6 +37,11 @@
       "name": "project-toolkit",
       "source": "./plugins/project-toolkit",
       "description": "Map of the shared tooling every project can use: acceptance criteria, browser verification, analytics-kit, ab-kit experiments, and deployment through the single hosting registry"
+    },
+    {
+      "name": "nikita-writing-style",
+      "source": "./plugins/nikita-writing-style",
+      "description": "Nikita Shvyryaev's business writing style for replies in MR threads, Jira and chats, loaded only on an explicit request"
     }
   ]
 }

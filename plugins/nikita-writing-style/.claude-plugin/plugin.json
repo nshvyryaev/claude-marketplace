@@ -1,0 +1,9 @@
+{
+  "name": "nikita-writing-style",
+  "version": "0.1.0",
+  "description": "Nikita Shvyryaev's business writing style for replies in MR threads, Jira and chats, loaded only on an explicit request",
+  "author": {
+    "name": "Nikita Shvyryaev",
+    "email": "nikitagsh@gmail.com"
+  }
+}
