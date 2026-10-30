@@ -142,9 +142,9 @@ function scanSource(source, relPath = '') {
 }
 
 /** Scan one file on disk. Missing files yield no findings (the caller may have deleted it). */
-function scanFile(absPath) {
+function scanFile(absPath, rootDir = ROOT_DIR) {
     if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) return [];
-    const rel = path.relative(ROOT_DIR, absPath).replace(/\\/g, '/');
+    const rel = path.relative(rootDir, absPath).replace(/\\/g, '/');
     let source = '';
     try { source = fs.readFileSync(absPath, 'utf8'); } catch { return []; }
     return scanSource(source, rel || path.basename(absPath)).map((f) => ({ ...f, file: rel || absPath }));
@@ -184,7 +184,7 @@ function main() {
         process.exit(2);
     }
 
-    const findings = files.flatMap(scanFile);
+    const findings = files.flatMap((file) => scanFile(file));
 
     if (asJson) {
         process.stdout.write(JSON.stringify({ findings }, null, 2) + '\n');

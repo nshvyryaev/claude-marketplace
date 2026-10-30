@@ -8,6 +8,21 @@ Read and edit Cocos Creator `.scene` / `.prefab` files via safe Node scripts. In
 /plugin install cocos-files-handler@nshvyryaev-claude-marketplace
 ```
 
+## OpenCode V2
+
+Add the native adapter and its adapted skill to `opencode.jsonc`:
+
+```jsonc
+{
+  "plugins": ["E:/projects/claude-marketplace/plugins/cocos-files-handler/opencode"],
+  "skills": ["E:/projects/claude-marketplace/plugins/cocos-files-handler/opencode/skills"]
+}
+```
+
+The dependency-free adapter blocks direct `write`/`edit`/`patch` changes to scenes
+and prefabs, and appends static-check findings after TypeScript changes. All patch
+targets are checked, including deleted and moved files.
+
 ## Initialize a project
 
 After install, run inside any Cocos project:
@@ -36,6 +51,7 @@ See `plugin-development.md` for conventions.
   - `block-cocos-files.js` (PreToolUse) blocks `Edit`/`Write`/`MultiEdit` on `*.scene`/`*.prefab`.
   - `verify-cocos-code.js` (PostToolUse) runs the static checks after every `.ts` write and reports findings back to the model.
 - `commands/cocos-files-handler-init.md` — `/cocos-files-handler:cocos-files-handler-init` slash command.
+- `opencode/` — native OpenCode V2 hooks, adapted skill and hook tests.
 
 ## Checking code by hand
 
@@ -47,4 +63,4 @@ Exit code 1 when something is wrong. Suppress a false positive with a trailing `
 
 ## Version
 
-`0.5.0`
+`0.7.0`

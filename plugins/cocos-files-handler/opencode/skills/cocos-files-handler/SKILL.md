@@ -1,0 +1,443 @@
+---
+name: cocos-files-handler
+description: Working with Cocos Creator scenes, prefabs and gameplay TypeScript. Use when you need to inspect or modify a prefab or scene, or when writing Cocos Creator 3.x component code — cocos-pitfalls.md lists API traps the compiler does not catch.
+---
+
+## Пишешь TypeScript для Cocos?
+
+Прочитай [cocos-pitfalls.md](cocos-pitfalls.md) — там API-ловушки Cocos Creator 3.x, которые
+**не ловит компилятор** и которые уже стоили времени на этих проектах. Проверить код руками:
+
+```bash
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/verify-cocos-code.js --all
+```
+
+post-write hook плагина гоняет ту же проверку автоматически после каждой записи `.ts`.
+
+## Куда писать временные JSON
+
+Все промежуточные JSON-файлы (patches.json, my-spec.json, ops-файлы для `edit-prefab.js`) — кладутся в **`./tmp/`** относительно cwd проекта (то есть в подпапку `tmp/` корня проекта). Эта папка должна быть в `.gitignore`.
+
+⚠️ **Только относительный путь.** Везде ниже, где встречается `tmp/...`, имеется в виду **`./tmp/...`** — подпапка проекта. НИКОГДА не используй абсолютные пути для этих файлов:
+- ❌ `/tmp/patches.json` — на Windows резолвится в корень текущего диска (`C:\tmp` / `E:\tmp`), требует админ-прав, операция падает или запрашивает повышение.
+- ❌ `C:\tmp\...`, `E:\tmp\...`, `$TMPDIR/...`, `%TEMP%\...` — то же самое, плюс эти пути не привязаны к проекту, файлы потеряются.
+- ✅ `./tmp/patches.json` или `tmp/patches.json` — оба варианта корректны, если cwd = корень проекта. При сомнениях используй явный `./` префикс.
+
+Перед первым запуском любого из скриптов убедись:
+
+1. Что `./tmp/` существует — `mkdir -p ./tmp` (скрипты с дефолтным выводом создают её сами, но для явных `--patches`/`--spec`/`--ops` путей лучше создать заранее).
+2. Что `tmp/` в `.gitignore` — если в файле проекта `.gitignore` нет строки `tmp/`, добавь её. Если `.gitignore` отсутствует — создай и положи туда `tmp/`.
+
+Не пиши в `.claude/` — операции там запрашивают разрешение, и это лишний шум.
+
+## Инструменты
+
+| Скрипт | Назначение |
+|--------|-----------|
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/extract-scene-strings.js` | Ищет Label с кириллицей в .scene/.prefab, пишет в `tmp/patches.json` |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-locale-keys.js` | Добавляет недостающие ключи в `ru.json` и `en.json` (идемпотентен) |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-localized-text.js --meta <meta> --patches tmp/patches.json` | Вставляет LocalizedText компоненты в сцены/префабы по patches.json |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-manager-to-scene.js --scene <scene> --meta <meta> --name <Name> --position first` | Добавляет менеджер-ноду в Start-сцену |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/fix-uuid-compact.js` | Заменяет полные UUID (36 символов) на компактные (23 символа) во всех сценах/префабах |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/prefab-inspector.js --file <prefab>` | Выводит читаемое дерево нод .prefab/.scene файла |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/find-sprite-frame.js --file <scene/prefab> [--node <Name>] [--index <n>]` | Извлекает UUID ассета SpriteFrame у существующего cc.Sprite — для повторного использования того же фона в новых нодах |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file <prefab> --spec <spec.json> [--dry-run]` | Вставляет поддерево нод в префаб по spec JSON |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/patch-component-property.js --file <scene> --node <NodeName> (--meta <meta> \| --type <cc.Type>) --property <prop> --value <val> [--dry-run]` | Устанавливает свойство на существующем компоненте в сцене/префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button и т.п.) |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js --file <scene/prefab> --node <NodeName> (--meta <meta> \| --type <cc.Type>) [--properties <json>] [--force] [--dry-run]` | Добавляет компонент к существующей ноде в сцене или префабе. `--meta` для script-компонентов, `--type` для встроенных (cc.Widget, cc.Button, cc.Layout и т.п.) |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/edit-prefab.js --file <scene/prefab> --ops <ops.json> [--dry-run]` | Применяет набор структурных операций (resize-uitransform, **set-position**, create-node, move-component, reparent) по JSON-файлу |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/create-prefab.js --file <prefab> --name <RootName> [--width w] [--height h] [--anchor-x ax] [--anchor-y ay] [--active true\|false] [--sprite-frame uuid@sub] [--sprite-color r,g,b,a] [--dry-run]` | Создаёт новый пустой .prefab файл с корневой нодой и UITransform (опционально — Sprite). |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/clone-scene.js --file <src.scene> --out <dst.scene> [--name <SceneName>] [--no-build] [--dry-run]` | Копирует сцену под новым uuid: свежий `.scene.meta`, старый uuid заменён во всём файле (`cc.Scene._id`, ссылки `cc.PrefabInfo`), `_id` нод и компонентов перегенерированы, `_name` сцены — из `--name` или имени файла; `fileId` и ссылки на другие ассеты не трогаются. Добавляет копию в список сборки `profiles/v2/packages/builder.json`: в `common.scenes` и в каждую задачу сборки, где уже есть исходная сцена (клон dev-сцены в сборку площадки не попадёт). Редактор держит этот файл у себя — закройте редактор или переоткройте панель сборки. Идемпотентен: существующий `<dst>` не перезаписывается, только досчитывается список сборки. Новый **префаб** — `create-prefab.js` + `add-prefab-nodes.js`. |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/create-anim-clip.js --atlas-meta <plist.meta> --name-prefix <prefix> --out <path.anim> [--clip-name n] [--sample 60] [--speed 1] [--wrap-mode 2] [--force] [--dry-run]` | Создаёт `cc.AnimationClip` (.anim + .anim.meta) из спрайт-фреймов атласа `.plist.meta`, отфильтрованных по префиксу имени и отсортированных лексикографически. Выходной clip биндится на `cc.Sprite.spriteFrame`. `--force` разрешает перезапись существующего `.anim`/`.anim.meta` и переиспользует UUID из существующего `.anim.meta` (стабильные ссылки в prefab при регенерации). Полученный `.anim.meta` можно подключать в `cc.Animation._clips` через `@asset:...anim.meta` (auto-resolves в `cc.AnimationClip`). |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-animation-clip.js --file <prefab> --clip-uuid <uuid>` | Идемпотентно добавляет UUID `cc.AnimationClip` в `cc.Animation._clips` существующего префаба. Падает, если в префабе нет `cc.Animation` или их больше одного. Не трогает `_defaultClip`. |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/verify-cocos-code.js (--all \| --file <path.ts>) [--json]` | Статические проверки TypeScript для Cocos 3.x, которых нет у `tsc`: `node.setActive()`, импорт `.json`, правка сгенерённого `temp/tsconfig.cocos.json`. Exit 1 при находках. Подавление — `// cocos-verify-ignore` в конце строки. Тот же чекер висит post-write hookом. |
+| `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/replace-label-font.js --file <scene/prefab> --font-meta <ttf.meta> [--mode system\|all] [--nodes A,B] [--exclude-nodes C] [--dry-run]` | Меняет шрифт у `cc.Label` в сцене/префабе. По умолчанию (`--mode system`) трогает только labels с `_isSystemFontUsed: true` (т.е. реально рендерящие системный Arial); ставит им `_font` на указанный TTF и `_isSystemFontUsed: false`. `--mode all` — переписать вообще все labels в файле. `--nodes` ограничивает правку нодами с перечисленными `_name` (так раскладывают роли: широкий проход основным шрифтом, затем узкие — на заголовки и цифры), `--exclude-nodes` исключает ноды, чьих глифов в шрифте нет (иконочные вроде `⚙`); исключение приоритетнее. Имя из `--nodes`, не совпавшее ни с одним label, даёт предупреждение. `_fontFamily` не трогается. Идемпотентен. |
+
+## Полный рабочий цикл перевода новых строк
+
+```bash
+# 1. Найти все кириллические строки в сценах и префабах
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/extract-scene-strings.js
+# → пишет tmp/patches.json
+
+# 2. Заполнить translationKey для каждой записи в patches.json
+# Пустые ключи пропускаются, оставить пустыми можно для динамического контента.
+
+# 3. Обновить add-locale-keys.js: добавить новые ключи в TRANSLATIONS,
+#    затем запустить — безопасно добавит только недостающие ключи
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-locale-keys.js
+
+# 4. Дождаться, чтобы Cocos Creator создал .meta для LocalizedText.ts
+# (файл создаётся автоматически при обнаружении нового .ts файла)
+
+# 5. Вставить LocalizedText компоненты в сцены/префабы
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-localized-text.js \
+  --meta assets/scripts/Components/LocalizedText.ts.meta \
+  --patches tmp/patches.json
+
+# 6. Проверить что кириллица не осталась
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/extract-scene-strings.js
+# → повторно вывести patches.json, всё с translationKey должно исчезнуть
+```
+
+## Справочники компонентов
+
+Детальные правила и ловушки — в отдельных файлах:
+- **[layout.md](layout.md)** — cc.Layout: типы, resizeMode, verticalDirection (ловушка BOTTOM_TO_TOP!), расчёт размеров
+- **[uitransform-positioning.md](uitransform-positioning.md)** — позиционирование нод, якоря, z-порядок, несоответствие якорей контейнера и дочерних нод
+
+## Инспекция и добавление нод в префабы
+
+### prefab-inspector.js — просмотр структуры
+
+```bash
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/prefab-inspector.js --file assets/prefabs/Settings.prefab
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/prefab-inspector.js --file assets/scenes/Settings.scene
+```
+
+Выводит читаемое дерево: имя ноды, индекс, active/inactive, размер UITransform, якорь, позицию, компоненты (тип, текст, цвет спрайта, uuid фрейма, layout-тип и т.д.). Используй перед редактированием, чтобы понять текущую структуру.
+
+### add-prefab-nodes.js — добавление поддерева нод
+
+```bash
+# Тестовый прогон (не пишет файл)
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec tmp/my-spec.json --dry-run
+
+# Реальное выполнение
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file assets/prefabs/Settings.prefab --spec tmp/my-spec.json
+```
+
+Скрипт **идемпотентен**: если нод с `idempotencyName` уже есть в родителе — пропускает.
+
+### Формат spec JSON
+
+```json
+{
+  "parentPath": "Settings",
+  "insertAt": "after:SleepBlocker",
+  "idempotencyName": "LanguageSettings",
+  "node": {
+    "name": "LanguageSettings",
+    "active": true,
+    "position": [0, 885, 0],
+    "layer": 33554432,
+    "components": [ ... ],
+    "children": [ ... ]
+  }
+}
+```
+
+`insertAt`: `"first"` | `"last"` | `"after:<childName>"` — вставить после ноды с указанным именем.
+
+**Дескрипторы компонентов:**
+
+```jsonc
+// Встроенные
+{"type": "cc.UITransform", "size": [640, 260], "anchor": [0.5, 1]}
+{"type": "cc.Sprite", "spriteFrame": "UUID@f9941", "spriteType": 0, "color": [255, 255, 255, 255]}
+{"type": "cc.Label", "text": "Язык", "fontSize": 28, "font": "UUID"}
+{"type": "cc.Layout", "layoutType": 2, "resizeMode": 1, "spacingY": 30, "verticalDirection": 1}
+// ⚠️ verticalDirection: 0=BOTTOM_TO_TOP (дефолт!), 1=TOP_TO_BOTTOM — см. layout.md
+
+// Пользовательский скрипт (UUID берётся из .meta файла)
+{"type": "meta", "metaFile": "assets/scripts/Components/MyComp.ts.meta",
+ "properties": {
+   "loaderPrefab": {"prefabMeta": "assets/prefabs/Loader.prefab.meta"}
+ }}
+
+// LocalizedText — частный случай meta
+{"type": "meta", "metaFile": "assets/scripts/Components/LocalizedText.ts.meta",
+ "translationKey": "ui.settings.language"}
+```
+
+Если `.meta` файл не найден (Cocos ещё не создал) — компонент пропускается с предупреждением, индекс не расходуется.
+
+**Workflow: добавить новый блок нод в префаб**
+1. `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/prefab-inspector.js --file ...` — понять текущую структуру и координаты
+2. Создать `tmp/my-spec.json` с нужными нодами
+3. Убедиться что Cocos Creator создал `.meta` для всех пользовательских скриптов
+4. `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file ... --spec ... --dry-run` — проверить
+5. `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-prefab-nodes.js --file ... --spec ...` — применить
+6. `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/prefab-inspector.js --file ...` — верифицировать результат
+
+## Изменение свойства существующего компонента
+
+```bash
+# Dry-run — посмотреть что изменится
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/patch-component-property.js \
+  --file assets/scenes/StartItch.scene \
+  --node LocalizationManager \
+  --meta assets/scripts/Managers/Global/LocalizationManager.ts.meta \
+  --property defaultLocale \
+  --value en \
+  --dry-run
+
+# Применить
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/patch-component-property.js \
+  --file assets/scenes/StartItch.scene \
+  --node LocalizationManager \
+  --meta assets/scripts/Managers/Global/LocalizationManager.ts.meta \
+  --property defaultLocale \
+  --value en
+```
+
+`--value` парсится как JSON (числа, boolean, объекты), при ошибке — трактуется как строка.
+Скрипт находит ноду по `--node` (имя), компонент — по compact UUID из `--meta` или по `--type` (например `cc.Widget`).
+
+Примеры с `--type`:
+
+```bash
+# Поменять alignMode у cc.Widget
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/patch-component-property.js \
+  --file assets/prefabs/MobileControls.prefab --node BonusButton \
+  --type cc.Widget --property alignMode --value 1
+```
+
+## Добавление компонента к существующей ноде
+
+`add-component.js` добавляет компонент к уже существующей ноде в сцене или префабе. Поддерживает:
+- **script-компоненты** через `--meta path/to/Script.ts.meta` — UUID берётся из meta-файла и сжимается в compact формат.
+- **встроенные cc.* компоненты** через `--type cc.Widget` (или `cc.Button`, `cc.Layout`, `cc.Sprite`, и т.п.) — `__type__` ставится напрямую без чтения meta.
+
+Автоматически различает формат (в префабах создаёт парный `cc.CompPrefabInfo`, в сценах — нет). Идемпотентен: если такой компонент уже есть на ноде — выводит сообщение и выходит (для дубликата использовать `--force`).
+
+```bash
+# Скрипт-компонент: пустой
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/prefabs/Player.prefab \
+  --node Player \
+  --meta assets/scripts/components/SpawnPoint.ts.meta
+
+# Скрипт-компонент: с простыми свойствами
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/prefabs/Enemy.prefab \
+  --node Enemy \
+  --meta assets/scripts/components/MoveSpeed.ts.meta \
+  --properties '{"value": 600}'
+
+# Скрипт-компонент: ссылки на ноды и ассеты
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/scenes/Main.scene \
+  --node GameWorld \
+  --meta assets/scripts/prefabs/EnemySpawner.ts.meta \
+  --properties '{"enemyPrefab":"@asset:assets/prefabs/Enemy.prefab.meta","playArea":"@node:PlayScreenBG","count":2,"speed":600}'
+
+# Встроенный тип: cc.Widget, растянутый на весь viewport
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/prefabs/MobileControls.prefab \
+  --node MobileControls \
+  --type cc.Widget \
+  --properties '{"isAlignTop":true,"isAlignBottom":true,"isAlignLeft":true,"isAlignRight":true,"top":0,"bottom":0,"left":0,"right":0,"alignMode":2}'
+
+# Встроенный тип: cc.Button
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/scenes/Start.scene \
+  --node PlayButton \
+  --type cc.Button \
+  --properties '{"transition":0,"target":"@node:PlayButton"}'
+```
+
+**Синтаксис ссылок в `--properties`** (любое строковое значение, включая вложенные):
+
+| Префикс | Преобразуется в | Пример |
+|---------|----------------|--------|
+| `@node:<NodeName>` | `{ "__id__": <id ноды в этом файле> }` | `"@node:PlayScreenBG"` |
+| `@asset:<path>.meta` | `{ "__uuid__": …, "__expectedType__": <из расширения> }` | `"@asset:assets/prefabs/Enemy.prefab.meta"` |
+| `@asset:<path>.meta:<Type>` | то же, но `__expectedType__` задан явно | `"@asset:assets/img/x.png.meta:cc.SpriteFrame"` |
+
+Автовывод `__expectedType__` по расширению: `.prefab→cc.Prefab`, `.scene→cc.SceneAsset`, `.png/.jpg/.jpeg/.webp→cc.SpriteFrame`, `.ttf/.otf→cc.TTFFont`, `.mp3/.ogg/.wav→cc.AudioClip`, `.json→cc.JsonAsset`, `.anim→cc.AnimationClip`, остальное → `cc.Asset`.
+
+Флаги:
+- `--force` — добавить ещё один экземпляр, даже если компонент уже есть на ноде.
+- `--dry-run` — показать, что изменилось бы, без записи в файл.
+
+После редактирования рекомендуется открыть сцену/префаб в Cocos Creator и сохранить, чтобы привести файл к каноническому формату (иначе следующее сохранение редактором может переупорядочить поля — cf. коммит ee59533).
+
+## Структурные правки префабов/сцен — edit-prefab.js
+
+`edit-prefab.js` применяет последовательность структурных операций к сцене или префабу. Операции описываются в JSON-файле (массив объектов или `{"ops":[...]}`). Поддерживает prefab- и scene-формат автоматически (в префабах создаются `cc.CompPrefabInfo`/`cc.PrefabInfo`, в сценах — нет).
+
+**Временные ops-файлы пиши в `tmp/` в корне проекта, а не в папку скилла** (после применения — удаляй).
+
+```bash
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/edit-prefab.js \
+  --file assets/prefabs/Player.prefab \
+  --ops tmp/my-edit.json \
+  [--dry-run]
+```
+
+### Формат ops-файла
+
+```jsonc
+{
+  "ops": [
+    // Изменить размер UITransform на ноде. anchor опционален.
+    { "op": "resize-uitransform", "node": "Player", "size": [32, 32], "anchor": [0.5, 0.5] },
+
+    // Создать новую ноду-ребёнка. uitransform опционален (если нужно UITransform).
+    // insertAt: "first" | "last" (по умолчанию) | "after:SiblingName"
+    { "op": "create-node", "name": "PlayerBackground", "parent": "Player",
+      "insertAt": "first", "position": [0, 0, 0],
+      "uitransform": { "size": [62, 62], "anchor": [0.5, 0.5] } },
+
+    // Перенести компонент с одной ноды на другую. componentType — либо встроенный
+    // тип ("cc.Sprite", "cc.Label", "cc.UITransform"), либо "meta:path/to/Script.ts.meta"
+    // для пользовательских скриптов.
+    { "op": "move-component", "from": "Player", "to": "PlayerBackground",
+      "componentType": "cc.Sprite" },
+
+    // Сменить родителя у существующей ноды.
+    { "op": "reparent", "node": "SomeChild", "newParent": "OtherParent",
+      "insertAt": "last" },
+
+    // Установить локальную позицию ноды (_lpos). z опционален (по умолчанию 0).
+    { "op": "set-position", "node": "PlayScreenBorder", "position": [0, -20, 0] },
+
+    // Удалить ноду с потомками и их компонентами; ссылки на них — null.
+    { "op": "delete-node", "node": "JoystickBase" },
+
+    // Удалить компонент с ноды (встроенный тип или "meta:…"); ссылки на него — null.
+    { "op": "delete-component", "node": "PauseButton", "componentType": "cc.Sprite" }
+  ]
+}
+```
+
+**Идемпотентность:**
+- `create-node` пропускается, если у родителя уже есть ребёнок с таким именем.
+- `move-component` пропускается, если компонент уже находится на целевой ноде.
+- `delete-component` сообщает и пропускает, если компонента на ноде нет.
+- `resize-uitransform`, `set-position` и `reparent` — всегда применяются (повторный запуск не изменит результат, если значения уже такие).
+
+**Поиск нод** — по имени (`_name`). Имена должны быть уникальны среди тех, к которым обращаешься в ops. При неоднозначности скрипт падает с ошибкой.
+
+### Пример: отделить визуал от хитбокса
+
+Типичный паттерн — когда спрайт включает размытую тень/ореол, и его реальный размер больше хитбокса. Переносим спрайт в дочернюю ноду, а корневой UITransform оставляем "правильного" размера (для AABB/коллизий).
+
+`tmp/shrink-player.json`:
+```json
+{
+  "ops": [
+    { "op": "resize-uitransform", "node": "Player", "size": [32, 32] },
+    { "op": "create-node", "name": "PlayerBackground", "parent": "Player",
+      "insertAt": "first", "uitransform": { "size": [62, 62] } },
+    { "op": "move-component", "from": "Player", "to": "PlayerBackground",
+      "componentType": "cc.Sprite" }
+  ]
+}
+```
+
+```bash
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/edit-prefab.js \
+  --file assets/prefabs/Player.prefab --ops tmp/shrink-player.json --dry-run
+# → проверить вывод, затем запустить без --dry-run
+rm tmp/shrink-player.json
+```
+
+## Создание sprite-frame анимаций
+
+Типичный кейс — есть атлас (`.plist` + `.png` + `.plist.meta` с заполненными `subMetas`), нужно собрать `cc.AnimationClip`, который перебирает фреймы по `cc.Sprite.spriteFrame`, и подключить его в `cc.Animation._clips`.
+
+### create-anim-clip.js — генерация .anim из атласа
+
+```bash
+# Сгенерировать idle.anim из всех фреймов атласа, чьё имя начинается с "dragon-3-idle-"
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/create-anim-clip.js \
+  --atlas-meta assets/resources/pets/dragon/teen/dragon-3-idle.plist.meta \
+  --name-prefix "dragon-3-idle-" \
+  --out         assets/resources/pets/dragon/teen/idle.anim \
+  --speed 0.2
+```
+
+Что делает:
+- Читает атласный `.plist.meta`, фильтрует `subMetas` по `name`-префиксу, сортирует **лексикографически** (поэтому имена должны быть с zero-padding: `…-00, …-01, … -11`).
+- Пишет `cc.AnimationClip` (один `cc.animation.ObjectTrack` на `cc.Sprite.spriteFrame`) и парный `.anim.meta` со свежим UUID v4.
+- Тайминг кадров: `i / sample`. Длительность клипа = `frames * (1 / sample)`. `--speed` — замедление/ускорение воспроизведения.
+
+Дефолты: `sample=60`, `speed=1`, `wrap-mode=2` (loop, `1` = Normal). Для блинков/idle обычно подходит `--speed 0.2` — смотри baby/idle.anim как образец.
+
+По умолчанию скрипт **отказывается перезаписывать** существующий `.anim` или `.anim.meta`. Передай `--force`, чтобы разрешить перезапись — при этом UUID из существующего `.anim.meta` сохранится, поэтому ссылки из префабов на этот клип не сломаются. Это основной режим для пайплайнов, которые регенерируют анимации (см. `tools/sprite-animator/`).
+
+### Подключение клипа в cc.Animation
+
+`.anim.meta` после генерации сразу подключается через `@asset:`:
+
+```bash
+node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-component.js \
+  --file assets/resources/pets/dragon/teen.prefab \
+  --node Sprite \
+  --type cc.Animation \
+  --properties '{
+    "playOnLoad": true,
+    "_clips": [
+      "@asset:assets/resources/pets/dragon/teen/idle.anim.meta",
+      "@asset:assets/resources/pets/dragon/teen/idle-blink.anim.meta"
+    ],
+    "_defaultClip": "@asset:assets/resources/pets/dragon/teen/idle.anim.meta"
+  }'
+```
+
+`@asset:...anim.meta` авторесолвится в `{ __uuid__, __expectedType__: "cc.AnimationClip" }`.
+
+### Workflow для нового набора анимаций
+1. В Cocos: положить атлас (`.plist`+`.png`), дождаться, чтобы сгенерировался `.plist.meta` с `subMetas`.
+2. Сгенерировать каждую анимацию: `create-anim-clip.js --atlas-meta ... --name-prefix ... --out ...`.
+3. (Опционально) Если префаб использовал старый атлас — обновить `cc.Sprite._atlas` и `cc.Sprite._spriteFrame` через `patch-component-property.js --type cc.Sprite`.
+4. Добавить или дополнить `cc.Animation` через `add-component.js --type cc.Animation` с `playOnLoad`, `_clips`, `_defaultClip`.
+5. Открыть Cocos Creator: `Project → Refresh` (или просто переключение фокуса) — редактор подхватит новые `.anim`.
+
+## UUID: КРИТИЧЕСКИ ВАЖНО
+
+Cocos Creator хранит ссылки на скрипты в сценах в **компактном 23-символьном формате**, НЕ в полном UUID из .meta файла.
+
+**Алгоритм конвертации** (реализован во всех E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/*.js скриптах):
+```javascript
+function compressUuid(uuid) {
+    const hex = uuid.replace(/-/g, '');                           // 32 hex символа
+    const tail = Buffer.from(hex.slice(5) + '0', 'hex')
+                       .toString('base64').slice(0, 18);          // 18 base64 символов
+    return hex.slice(0, 5) + tail;                                // итого 23 символа
+}
+// Пример: 'e19100ae-3625-4b77-b188-eddd782afe79' → 'e1910CuNiVLd7GI7d14Kv55'
+```
+
+Если скрипты вставили компоненты с **полным UUID** (36 символов с дефисами) — Cocos показывает
+`Script "..." is missing or invalid`. Исправление: запустить `node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/fix-uuid-compact.js`.
+
+## Формат Cocos Creator 3.x сцены (JSON-массив)
+
+- `cc.Scene` — объект с `_children` (индексы дочерних нод)
+- `cc.Node` — объект с `_components: [{__id__: N}]`
+- Компонент — объект с `__type__: "<compact-uuid>"` и `node: {__id__: N}`
+- Встроенные типы: `"cc.Label"`, `"cc.UITransform"`, `"cc.Sprite"` — полные строки
+- Пользовательские скрипты: всегда compact UUID
+
+Скрипт `add-localized-text.js` — **идемпотентен**: не добавит второй LocalizedText если нода уже его содержит.
+
+## Локализация: архитектура
+
+- `utils/i18n.ts` — `t(key)`: синхронная, бросает ошибку если вызвана до загрузки переводов
+- `utils/i18n.ts` — `i18nEvents` EventTarget + константа `LANGUAGE_CHANGED`: подписка на смену языка
+- `utils/i18n.ts` — `changeLanguage(locale)`, `resetToAutoLanguage()`, `isManualLanguageSet()`: мост для компонентов (не зависят от Managers)
+- `LocalizationManager` (Persistent) — регистрирует translate-функцию + changeLanguage/resetToAuto/isManualSet
+- `LocalizedText` (Component) — в `onLoad()` подписывается на `LANGUAGE_CHANGED`, переводит при каждой смене языка
+- Locale-файлы: `assets/resources/data/locale/ru.json` и `en.json`
+
+**Приоритет языка**: Сохранённая настройка (`localStorage.userLanguage`) → Автоопределение → Дефолт (`'ru'`)
+
+**Языки**: `ru, uk, be, kz` → `'ru'`; остальное → `'en'` (в DefaultLanguageSource)
+
+**Тестирование языка**: добавить `?lang=en` в URL при открытии StartTest сцены.
+
+## Добавление нового менеджера в Start-сцены
+
+```bash
+# Дождаться создания .meta файла Cocos Creator, затем:
+for scene in StartDefault StartVK StartYandex StartTest; do
+  node E:/projects/claude-marketplace/plugins/cocos-files-handler/skills/cocos-files-handler/scripts/add-manager-to-scene.js \
+    --scene "assets/scenes/${scene}.scene" \
+    --meta "assets/scripts/Managers/Global/MyManager.ts.meta" \
+    --name MyManager --position first
+done
+```
+
+`--position first` обязателен для менеджеров, которые должны инициализироваться до AutoNavigate.
