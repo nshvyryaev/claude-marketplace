@@ -75,11 +75,26 @@ acceptance verified <slug> --evidence "чем доказано"
 
 Корень проекта берётся из `CLAUDE_PROJECT_DIR`, иначе — текущий каталог.
 
+## OpenCode V2
+
+Добавьте в проектный `opencode.jsonc`:
+
+```jsonc
+{
+  "plugins": ["E:/projects/claude-marketplace/plugins/acceptance/opencode"],
+  "skills": ["E:/projects/claude-marketplace/plugins/acceptance/skills"]
+}
+```
+
+Нативный dependency-free плагин `opencode/` перехватывает `write`, `edit` и все
+цели `patch`, включая удаление и перемещение файлов. Slash-команда переносится в
+проектный `.opencode/commands/acceptance.md`.
+
 ## Хук
 
-`PreToolUse` на `Edit|Write|MultiEdit|NotebookEdit`. Запрещает правку файлов в
-`docs/acceptance/`, чей статус не `draft`. Создание нового файла разрешено —
-это новый черновик.
+В Claude Code — `PreToolUse` на `Edit|Write|MultiEdit|NotebookEdit`; в OpenCode —
+`execute.before`. Запрещает правку файлов в `docs/acceptance/`, чей статус не
+`draft`. Создание нового файла разрешено — это новый черновик.
 
 Хук никогда не валит работу из-за собственной поломки: любая неожиданность
 означает «нет мнения». Единственное исключение — файл, который не удалось

@@ -1,6 +1,6 @@
 # nshvyryaev-claude-marketplace
 
-Personal Claude Code plugins.
+Personal Claude Code plugins, with native OpenCode V2 adapters for acceptance and cocos-files-handler.
 
 ## Install the marketplace
 
