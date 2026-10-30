@@ -21,9 +21,11 @@ node E:/projects/claude-marketplace/plugins/acceptance/scripts/acceptance.mjs <l
 
 Файлы — `docs/acceptance/<slug>.md` в проекте. `feature` и `ui` не начинаются
 без ответа инженера (`--evidence` — дословно). Неверный критерий
-размораживается с причиной, а не правится молча. В новом проекте плагин
-включается в `.claude/settings.json`:
-`"enabledPlugins": { "acceptance@nshvyryaev-claude-marketplace": true }`.
+размораживается с причиной, а не правится молча. В Claude Code плагин
+включается в `.claude/settings.json`; в OpenCode — записью
+`E:/projects/claude-marketplace/plugins/acceptance/opencode` в `plugins` и
+`E:/projects/claude-marketplace/plugins/acceptance/skills` в `skills` проектного
+`opencode.jsonc`.
 
 ## Проверки в браузере — плагин `verify-web`
 
